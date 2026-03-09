@@ -315,7 +315,7 @@ export default function App() {
             <div className="bg-indigo-600 p-2 rounded-lg">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-xl font-semibold tracking-tight">AI Resume Tailor</h1>
+            <h1 className="text-xl font-semibold tracking-tight">Resume management</h1>
           </div>
           <div className="flex items-center gap-4">
             <button
