@@ -23,6 +23,17 @@ export interface ResumeData {
   skills: {
     [key: string]: string;
   };
+  coverLetter?: string;
+}
+
+export interface SavedResume {
+  id: string;
+  stackInfo: string;
+  description: string;
+  createdAt: string;
+  resumeData: ResumeData;
+  originalResume: string;
+  jobDesc: string;
 }
 
 declare global {

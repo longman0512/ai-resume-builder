@@ -4,10 +4,10 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { FileText, Briefcase, Sparkles, Copy, Download, Loader2, CheckCircle2, AlertCircle, Edit3, Eye, Plus, Trash2, MinusCircle, PlusCircle, LayoutPanelLeft } from 'lucide-react';
+import { FileText, Briefcase, Sparkles, Copy, Download, Loader2, CheckCircle2, AlertCircle, Edit3, Eye, Plus, Trash2, MinusCircle, PlusCircle, LayoutPanelLeft, History, Save, X, Clock, Layers } from 'lucide-react';
 import { generateTailoredResume } from './services/ai';
 import { cn } from './lib/utils';
-import { ResumeData } from './types';
+import { ResumeData, SavedResume } from './types';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -20,8 +20,29 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showInputs, setShowInputs] = useState(false);
+  const [activeTab, setActiveTab] = useState<'resume' | 'coverLetter'>('resume');
   const [hasApiKey, setHasApiKey] = useState(true);
+  const [savedResumes, setSavedResumes] = useState<SavedResume[]>([]);
+  const [view, setView] = useState<'editor' | 'dashboard'>('editor');
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [stackInfo, setStackInfo] = useState('');
+  const [saveDescription, setSaveDescription] = useState('');
   const resumeRef = useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const saved = localStorage.getItem('ai_resumes');
+    if (saved) {
+      try {
+        setSavedResumes(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to parse saved resumes', e);
+      }
+    }
+  }, []);
+
+  React.useEffect(() => {
+    localStorage.setItem('ai_resumes', JSON.stringify(savedResumes));
+  }, [savedResumes]);
 
   React.useEffect(() => {
     const checkApiKey = async () => {
@@ -54,6 +75,9 @@ export default function App() {
         const parsed = JSON.parse(result) as ResumeData;
         setResumeData(parsed);
         setShowInputs(false);
+        // Auto-fill stack info if possible, or leave blank for user
+        setStackInfo('');
+        setSaveDescription('');
       } else {
         throw new Error('No response from AI');
       }
@@ -72,6 +96,39 @@ export default function App() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleSaveResume = () => {
+    if (!resumeData) return;
+    
+    const newSavedResume: SavedResume = {
+      id: crypto.randomUUID(),
+      stackInfo: stackInfo || 'General',
+      description: saveDescription || 'Untitled Resume',
+      createdAt: new Date().toISOString(),
+      resumeData,
+      originalResume: resume,
+      jobDesc: jobDesc,
+    };
+
+    setSavedResumes([newSavedResume, ...savedResumes]);
+    setSaveModalOpen(false);
+    setView('dashboard');
+    setStackInfo('');
+    setSaveDescription('');
+  };
+
+  const loadResume = (saved: SavedResume) => {
+    setResumeData(saved.resumeData);
+    setResume(saved.originalResume);
+    setJobDesc(saved.jobDesc);
+    setView('editor');
+    setShowInputs(false);
+  };
+
+  const deleteSavedResume = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSavedResumes(savedResumes.filter(r => r.id !== id));
   };
 
   const downloadPDF = async () => {
@@ -112,8 +169,12 @@ export default function App() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       
+      const filename = activeTab === 'resume' 
+        ? `${resumeData.personalInfo.name.replace(/\s+/g, '_')}_Resume.pdf`
+        : `${resumeData.personalInfo.name.replace(/\s+/g, '_')}_CoverLetter.pdf`;
+      
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
-      pdf.save(`${resumeData.personalInfo.name.replace(/\s+/g, '_')}_Resume.pdf`);
+      pdf.save(filename);
     } catch (err) {
       console.error('PDF Generation Error:', err);
       alert('Failed to generate PDF. Please try again. Error: ' + (err instanceof Error ? err.message : String(err)));
@@ -228,6 +289,17 @@ export default function App() {
             <h1 className="text-xl font-semibold tracking-tight">AI Resume Tailor</h1>
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setView(view === 'dashboard' ? 'editor' : 'dashboard')}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors text-sm font-medium",
+                view === 'dashboard' ? "bg-indigo-50 border-indigo-200 text-indigo-600" : "border-slate-200 hover:bg-slate-50"
+              )}
+            >
+              <History className="w-4 h-4" />
+              {view === 'dashboard' ? 'Back to Editor' : 'History'}
+            </button>
+            <div className="w-px h-6 bg-slate-200 mx-1" />
             {!hasApiKey && (
               <button
                 onClick={handleOpenKeyDialog}
@@ -236,6 +308,28 @@ export default function App() {
                 <AlertCircle className="w-4 h-4" />
                 Select API Key
               </button>
+            )}
+            {resumeData && (
+              <div className="flex bg-slate-100 p-1 rounded-xl">
+                <button
+                  onClick={() => setActiveTab('resume')}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-sm font-medium transition-all",
+                    activeTab === 'resume' ? "bg-white shadow-sm text-indigo-600" : "text-slate-600 hover:text-slate-900"
+                  )}
+                >
+                  Resume
+                </button>
+                <button
+                  onClick={() => setActiveTab('coverLetter')}
+                  className={cn(
+                    "px-4 py-1.5 rounded-lg text-sm font-medium transition-all",
+                    activeTab === 'coverLetter' ? "bg-white shadow-sm text-indigo-600" : "text-slate-600 hover:text-slate-900"
+                  )}
+                >
+                  Cover Letter
+                </button>
+              </div>
             )}
             {resumeData && (
               <>
@@ -273,9 +367,16 @@ export default function App() {
                   ) : (
                     <>
                       <Download className="w-4 h-4" />
-                      Download PDF
+                      Download {activeTab === 'resume' ? 'Resume' : 'Cover Letter'}
                     </>
                   )}
+                </button>
+                <button
+                  onClick={() => setSaveModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors text-sm font-medium shadow-sm"
+                >
+                  <Save className="w-4 h-4" />
+                  Save to History
                 </button>
               </>
             )}
@@ -284,7 +385,92 @@ export default function App() {
       </header>
 
       <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!resumeData ? (
+        {view === 'dashboard' ? (
+          <div className="space-y-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">Resume History</h2>
+                <p className="text-slate-500">Manage your tailored resumes grouped by stack and company.</p>
+              </div>
+              <button
+                onClick={() => setView('editor')}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all font-semibold shadow-lg shadow-indigo-200"
+              >
+                <Plus className="w-5 h-5" />
+                Create New Resume
+              </button>
+            </div>
+
+            {savedResumes.length === 0 ? (
+              <div className="bg-white rounded-3xl border border-slate-200 border-dashed p-20 flex flex-col items-center justify-center text-center space-y-4">
+                <div className="bg-slate-50 p-6 rounded-full">
+                  <History className="w-12 h-12 text-slate-200" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-semibold text-slate-900">No saved resumes yet</h3>
+                  <p className="text-slate-500 max-w-sm">
+                    Generate and save your tailored resumes to see them here. You can group them by technology stack and company.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {savedResumes.map((saved) => (
+                  <div 
+                    key={saved.id}
+                    onClick={() => loadResume(saved)}
+                    className="group bg-white rounded-2xl border border-slate-200 p-6 hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-500/5 transition-all cursor-pointer relative overflow-hidden"
+                  >
+                    <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={(e) => deleteSavedResume(saved.id, e)}
+                        className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-3">
+                        <div className="bg-indigo-50 p-3 rounded-xl">
+                          <Layers className="w-6 h-6 text-indigo-600" />
+                        </div>
+                        <div className="space-y-1">
+                          <h3 className="font-bold text-slate-900 line-clamp-1">{saved.description}</h3>
+                          <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <Clock className="w-3 h-3" />
+                            {new Date(saved.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-100">
+                          <Layers className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="text-xs font-medium text-slate-600">{saved.stackInfo}</span>
+                        </div>
+                        <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed">
+                          {saved.resumeData.profile}
+                        </p>
+                      </div>
+
+                      <div className="pt-4 flex items-center justify-between border-t border-slate-50">
+                        <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">View Details</span>
+                        <div className="flex -space-x-2">
+                          {Object.keys(saved.resumeData.skills).slice(0, 3).map((cat, i) => (
+                            <div key={i} className="w-6 h-6 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-400">
+                              {cat[0]}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : !resumeData ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Input Section */}
             <div className="space-y-6">
@@ -392,7 +578,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Resume Container */}
+            {/* Content Container */}
             <div className="flex flex-col items-center">
               <div 
                 ref={resumeRef}
@@ -401,65 +587,104 @@ export default function App() {
                   isEditing && "ring-4 ring-indigo-100"
                 )}
               >
-                {/* Header */}
-                <div className="text-center mb-6">
-                  {isEditing ? (
-                    <input 
-                      className="text-4xl font-bold w-full text-center border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none mb-1"
-                      value={resumeData.personalInfo.name}
-                      onChange={(e) => updatePersonalInfo('name', e.target.value)}
-                    />
-                  ) : (
-                    <h1 className="text-4xl font-bold mb-1">{resumeData.personalInfo.name}</h1>
-                  )}
-                  
-                  {isEditing ? (
-                    <input 
-                      className="text-xl italic text-indigo-900 w-full text-center border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none mb-3"
-                      value={resumeData.personalInfo.title}
-                      onChange={(e) => updatePersonalInfo('title', e.target.value)}
-                    />
-                  ) : (
-                    <p className="text-xl italic text-indigo-900 mb-3">{resumeData.personalInfo.title}</p>
-                  )}
+                {activeTab === 'resume' ? (
+                  <>
+                    {/* Header */}
+                    <div className="text-center mb-6">
+                      {isEditing ? (
+                        <input 
+                          className="text-4xl font-bold w-full text-center border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none mb-1"
+                          value={resumeData.personalInfo.name}
+                          onChange={(e) => updatePersonalInfo('name', e.target.value)}
+                        />
+                      ) : (
+                        <h1 className="text-4xl font-bold mb-1">{resumeData.personalInfo.name}</h1>
+                      )}
+                      
+                      {isEditing ? (
+                        <input 
+                          className="text-xl italic text-indigo-900 w-full text-center border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none mb-3"
+                          value={resumeData.personalInfo.title}
+                          onChange={(e) => updatePersonalInfo('title', e.target.value)}
+                        />
+                      ) : (
+                        <p className="text-xl italic text-indigo-900 mb-3">{resumeData.personalInfo.title}</p>
+                      )}
 
-                  <div className="text-sm flex flex-wrap justify-center gap-2 text-slate-600">
-                    {['email', 'phone', 'location', 'linkedin'].map((field) => (
-                      <React.Fragment key={field}>
+                      <div className="text-sm flex flex-wrap justify-center gap-2 text-slate-600">
+                        {['email', 'phone', 'location', 'linkedin'].map((field) => (
+                          <React.Fragment key={field}>
+                            {isEditing ? (
+                              <input 
+                                className="border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none px-1"
+                                value={resumeData.personalInfo[field as keyof ResumeData['personalInfo']]}
+                                onChange={(e) => updatePersonalInfo(field as keyof ResumeData['personalInfo'], e.target.value)}
+                              />
+                            ) : (
+                              <span>{resumeData.personalInfo[field as keyof ResumeData['personalInfo']]}</span>
+                            )}
+                            {field !== 'linkedin' && <span className="text-slate-300">|</span>}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Profile */}
+                    {(resumeData.profile || isEditing) && (
+                      <section className="mb-6">
+                        <h2 className="text-lg font-bold border-b-2 border-slate-900 mb-2 uppercase tracking-wide">Profile</h2>
                         {isEditing ? (
-                          <input 
-                            className="border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none px-1"
-                            value={resumeData.personalInfo[field as keyof ResumeData['personalInfo']]}
-                            onChange={(e) => updatePersonalInfo(field as keyof ResumeData['personalInfo'], e.target.value)}
+                          <textarea 
+                            className="w-full p-2 border border-slate-200 rounded focus:border-indigo-500 outline-none text-sm leading-relaxed"
+                            rows={4}
+                            value={resumeData.profile}
+                            onChange={(e) => setResumeData({...resumeData, profile: e.target.value})}
                           />
                         ) : (
-                          <span>{resumeData.personalInfo[field as keyof ResumeData['personalInfo']]}</span>
+                          <p className="text-sm text-justify">{resumeData.profile}</p>
                         )}
-                        {field !== 'linkedin' && <span className="text-slate-300">|</span>}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Profile */}
-                {(resumeData.profile || isEditing) && (
-                  <section className="mb-6">
-                    <h2 className="text-lg font-bold border-b-2 border-slate-900 mb-2 uppercase tracking-wide">Profile</h2>
-                    {isEditing ? (
-                      <textarea 
-                        className="w-full p-2 border border-slate-200 rounded focus:border-indigo-500 outline-none text-sm leading-relaxed"
-                        rows={4}
-                        value={resumeData.profile}
-                        onChange={(e) => setResumeData({...resumeData, profile: e.target.value})}
-                      />
-                    ) : (
-                      <p className="text-sm text-justify">{resumeData.profile}</p>
+                      </section>
                     )}
-                  </section>
+                  </>
+                ) : (
+                  <div className="flex flex-col h-full">
+                    {/* Cover Letter Header */}
+                    <div className="mb-8">
+                      <p className="text-sm font-bold">{resumeData.personalInfo.name}</p>
+                      <p className="text-xs text-slate-600">{resumeData.personalInfo.location}</p>
+                      <p className="text-xs text-slate-600">{resumeData.personalInfo.email} | {resumeData.personalInfo.phone}</p>
+                      
+                      <div className="mt-8">
+                        <p className="text-sm">{new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                      </div>
+                    </div>
+
+                    {/* Cover Letter Content */}
+                    <div className="flex-grow">
+                      {isEditing ? (
+                        <textarea 
+                          className="w-full h-[200mm] p-4 border border-slate-200 rounded focus:border-indigo-500 outline-none text-sm leading-relaxed font-serif"
+                          value={resumeData.coverLetter}
+                          onChange={(e) => setResumeData({...resumeData, coverLetter: e.target.value})}
+                        />
+                      ) : (
+                        <div className="text-sm whitespace-pre-wrap leading-relaxed text-justify font-serif">
+                          {resumeData.coverLetter}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-12">
+                      <p className="text-sm">Sincerely,</p>
+                      <p className="text-sm font-bold mt-4">{resumeData.personalInfo.name}</p>
+                    </div>
+                  </div>
                 )}
 
-                {/* Experience */}
-                <section className="mb-6">
+                {activeTab === 'resume' && (
+                  <>
+                    {/* Experience */}
+                    <section className="mb-6">
                   <div className="flex items-center justify-between border-b-2 border-slate-900 mb-3">
                     <h2 className="text-lg font-bold uppercase tracking-wide">Professional Experience</h2>
                     {isEditing && (
@@ -685,7 +910,9 @@ export default function App() {
                     ))}
                   </div>
                 </section>
-              </div>
+              </>
+            )}
+          </div>
               
               <button
                 onClick={() => {
@@ -701,6 +928,71 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Save Modal */}
+      {saveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="bg-emerald-100 p-2 rounded-lg">
+                  <Save className="w-5 h-5 text-emerald-600" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">Save to History</h3>
+              </div>
+              <button 
+                onClick={() => setSaveModalOpen(false)}
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Stack Info</label>
+                <div className="relative">
+                  <Layers className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input 
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                    placeholder="e.g. Full Stack (Node, React)"
+                    value={stackInfo}
+                    onChange={(e) => setStackInfo(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">Description / Company</label>
+                <div className="relative">
+                  <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input 
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                    placeholder="e.g. Google Application"
+                    value={saveDescription}
+                    onChange={(e) => setSaveDescription(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button 
+                  onClick={() => setSaveModalOpen(false)}
+                  className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleSaveResume}
+                  className="flex-1 px-4 py-3 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+                >
+                  Save Resume
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center text-slate-400 text-sm">

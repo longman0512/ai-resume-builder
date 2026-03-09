@@ -27,6 +27,7 @@ export async function generateTailoredResume(currentResume: string, jobDescripti
        - These bullets should describe what a professional in that role *would* have done to be a perfect fit for the target job, using the technologies and methodologies requested in the JD (e.g., C#, .NET, Agile).
        - IMPORTANT: Integrate mentions of the identified main product or domain into the experience bullet points to show direct relevance.
        - Generate a "skills" section that lists the core technologies from the "Job Description".
+       - Generate a "coverLetter" (approx. 250-350 words) that is highly professional, persuasive, and specifically addresses the hiring manager. It should highlight the candidate's relevant skills and enthusiasm for the role and the company's mission/product.
     4. ACCURACY: Ensure the generated content is professional, impactful, and plausible within the provided timeline.
     5. STRUCTURE: Output the result in the strict JSON format below.
     
@@ -60,7 +61,8 @@ export async function generateTailoredResume(currentResume: string, jobDescripti
       "skills": {
         "Category Name (e.g. Languages)": "Skill 1, Skill 2",
         "Category Name (e.g. Frameworks)": "Skill 1, Skill 2"
-      }
+      },
+      "coverLetter": "A complete, professional cover letter text."
     }
   `;
 
