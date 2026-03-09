@@ -1,0 +1,76 @@
+import { GoogleGenAI, Type } from "@google/genai";
+
+export async function generateTailoredResume(currentResume: string, jobDescription: string) {
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const model = "gemini-3-flash-preview";
+  
+  const prompt = `
+    You are an expert career coach and professional resume writer. 
+    Your task is to tailor the provided resume to match the given job description.
+    
+    Current Resume:
+    ${currentResume}
+    
+    Job Description:
+    ${jobDescription}
+    
+    Instructions:
+    1. SOURCE DATA: From the "Current Resume", ONLY extract the following:
+       - Personal Information (Name, Email, Phone, Location, LinkedIn).
+       - Education history (Degrees, Schools, Periods, Majors).
+       - Experience skeleton (Company Names and Employment Periods ONLY).
+    2. IGNORE: Completely ignore all existing professional summaries, job descriptions, bullet points, and skills from the "Current Resume". Do NOT use them as a reference.
+    3. GENERATE (TAILORED CONTENT):
+       - Based ONLY on the "Job Description", generate a "Target Job Title" and a "Profile" summary.
+       - IDENTIFY: Find the main product, core service, or business domain mentioned in the "Job Description".
+       - For each company in the "Experience skeleton", generate a "Role" and 3-4 "bullets" (achievements/responsibilities) that are perfectly tailored to the "Job Description". 
+       - These bullets should describe what a professional in that role *would* have done to be a perfect fit for the target job, using the technologies and methodologies requested in the JD (e.g., C#, .NET, Agile).
+       - IMPORTANT: Integrate mentions of the identified main product or domain into the experience bullet points to show direct relevance.
+       - Generate a "skills" section that lists the core technologies from the "Job Description".
+    4. ACCURACY: Ensure the generated content is professional, impactful, and plausible within the provided timeline.
+    5. STRUCTURE: Output the result in the strict JSON format below.
+    
+    Output the result in a strict JSON format with the following structure:
+    {
+      "personalInfo": {
+        "name": "Full Name",
+        "title": "Target Job Title",
+        "email": "Email",
+        "phone": "Phone Number",
+        "location": "City, Country",
+        "linkedin": "linkedin.com/in/username"
+      },
+      "profile": "A strong professional summary tailored to the job.",
+      "experience": [
+        {
+          "company": "Company Name",
+          "role": "Job Title",
+          "period": "MM/YYYY – MM/YYYY or Present",
+          "bullets": ["Bullet point 1", "Bullet point 2"]
+        }
+      ],
+      "education": [
+        {
+          "degree": "Degree Name",
+          "school": "University Name",
+          "period": "MM/YYYY – MM/YYYY",
+          "major": "Field of Study"
+        }
+      ],
+      "skills": {
+        "Category Name (e.g. Languages)": "Skill 1, Skill 2",
+        "Category Name (e.g. Frameworks)": "Skill 1, Skill 2"
+      }
+    }
+  `;
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: [{ parts: [{ text: prompt }] }],
+    config: {
+      responseMimeType: "application/json"
+    }
+  });
+
+  return response.text;
+}
