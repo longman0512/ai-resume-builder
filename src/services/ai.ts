@@ -76,3 +76,32 @@ export async function generateTailoredResume(currentResume: string, jobDescripti
 
   return response.text;
 }
+
+export async function extractJobMetadata(jobDescription: string) {
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const model = "gemini-3-flash-preview";
+
+  const prompt = `
+    Extract the company name and the main technology stack/skills from this job description.
+    Focus on identifying the primary programming languages, frameworks, and tools mentioned.
+    
+    Job Description:
+    ${jobDescription}
+    
+    Output in JSON format:
+    {
+      "company": "Company Name",
+      "stack": "Main Stack/Skills (e.g. React, Node.js, TypeScript, AWS)"
+    }
+  `;
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: [{ parts: [{ text: prompt }] }],
+    config: {
+      responseMimeType: "application/json"
+    }
+  });
+
+  return response.text;
+}
