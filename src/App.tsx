@@ -8,14 +8,13 @@ import { FileText, Briefcase, Sparkles, Copy, Download, Loader2, CheckCircle2, A
 import { generateTailoredResume, extractJobMetadata } from './services/ai';
 import { cn } from './lib/utils';
 import { ResumeData, SavedResume } from './types';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 
 export default function App() {
   const [resume, setResume] = useState('');
   const [jobDesc, setJobDesc] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -162,107 +161,122 @@ export default function App() {
     setSavedResumes(savedResumes.filter(r => r.id !== id));
   };
 
-  const downloadPDF = async () => {
-    if (!resumeRef.current || !resumeData) {
-      console.error('Missing resumeRef or resumeData');
-      return;
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const captureTabAsPdf = async (pdf: jsPDF, addNewPage: boolean) => {
+    if (!resumeRef.current) return;
+
+    // Wait for tab content to render fully
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const element = resumeRef.current;
+
+    // Temporarily remove HTML padding — margins will be added by the PDF
+    const origPadding = element.style.padding;
+    const origWidth = element.style.width;
+    element.style.padding = '0';
+    // Shrink width to content area (210mm - 2*10mm = 190mm)
+    element.style.width = '190mm';
+
+    // Let browser re-layout with removed padding
+    await new Promise(resolve => setTimeout(resolve, 200));
+    element.scrollIntoView({ block: 'start' });
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+    });
+
+    // Restore original padding and width immediately
+    element.style.padding = origPadding;
+    element.style.width = origWidth;
+
+    // PDF margins: left/right = 10mm (1cm), top/bottom = 20mm (2cm)
+    const marginX = 10; // 1cm left and right
+    const marginY = 20; // 2cm top and bottom
+    const pdfPageWidth = 210;  // A4 width mm
+    const pdfPageHeight = 297; // A4 height mm
+    const contentWidth = pdfPageWidth - 2 * marginX;   // 190mm
+    const contentHeight = pdfPageHeight - 2 * marginY; // 257mm
+
+    // How many canvas pixels correspond to contentHeight (257mm) of PDF?
+    const totalImgHeightMm = (canvas.height * contentWidth) / canvas.width;
+    const pixelsPerMm = canvas.height / totalImgHeightMm;
+    const sliceHeightPx = Math.floor(contentHeight * pixelsPerMm);
+
+    const totalPages = Math.ceil(canvas.height / sliceHeightPx);
+
+    for (let page = 0; page < totalPages; page++) {
+      if (page === 0 && addNewPage) pdf.addPage();
+      if (page > 0) pdf.addPage();
+
+      // Slice a chunk from the full canvas for this page
+      const srcY = page * sliceHeightPx;
+      const srcH = Math.min(sliceHeightPx, canvas.height - srcY);
+
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = srcH;
+      const ctx = pageCanvas.getContext('2d');
+      if (!ctx) continue;
+
+      // Fill white background, then draw the slice
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+      ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
+
+      const pageImgData = pageCanvas.toDataURL('image/png', 1.0);
+      const sliceHeightMm = (srcH * contentWidth) / canvas.width;
+
+      pdf.addImage(pageImgData, 'PNG', marginX, marginY, contentWidth, sliceHeightMm, undefined, 'FAST');
     }
-    
+  };
+
+  // Helper: switch tab and wait for React to re-render the DOM
+  const switchTabAndWait = (tab: 'resume' | 'coverLetter'): Promise<void> => {
+    return new Promise(resolve => {
+      setActiveTab(tab);
+      // Use requestAnimationFrame + setTimeout to ensure React has flushed the update
+      requestAnimationFrame(() => {
+        setTimeout(resolve, 600);
+      });
+    });
+  };
+
+  const downloadPDF = async () => {
+    if (!resumeRef.current || !resumeData) return;
+
     const wasEditing = isEditing;
     if (wasEditing) setIsEditing(false);
     setIsDownloading(true);
-    
+
+    const prevTab = activeTab;
+    const nameSlug = resumeData.personalInfo.name.replace(/\s+/g, '_');
+
     try {
-      // Store original scroll position
-      const scrollY = window.scrollY;
-      window.scrollTo(0, 0);
+      // 1. Generate Resume PDF
+      await switchTabAndWait('resume');
+      const resumePdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+      await captureTabAsPdf(resumePdf, false);
+      resumePdf.save(`${nameSlug}_Resume.pdf`);
 
-      // Small delay to ensure any pending renders are complete and scroll has settled
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Small delay between saves so browser doesn't block the second download
+      await new Promise(resolve => setTimeout(resolve, 800));
 
-      // Convert oklch colors to rgb before rendering
-      const convertOklchToRgb = (element: HTMLElement) => {
-        const computedStyle = window.getComputedStyle(element);
-        const properties = ['color', 'background-color', 'border-color', 'border-top-color', 'border-bottom-color', 'border-left-color', 'border-right-color'];
-        
-        properties.forEach(prop => {
-          const value = computedStyle.getPropertyValue(prop);
-          if (value && value.includes('oklch')) {
-            element.style.setProperty(prop, value, 'important');
-          }
-        });
-        
-        // Recursively convert children
-        Array.from(element.children).forEach(child => convertOklchToRgb(child as HTMLElement));
-      };
-      
-      // Create a clone to avoid modifying the original
-      const clone = resumeRef.current.cloneNode(true) as HTMLElement;
-      document.body.appendChild(clone);
-      clone.style.position = 'absolute';
-      clone.style.left = '-9999px';
-      
-      // Force style computation
-      convertOklchToRgb(clone);
+      // 2. Generate Cover Letter PDF
+      await switchTabAndWait('coverLetter');
+      const coverPdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+      await captureTabAsPdf(coverPdf, false);
+      coverPdf.save(`${nameSlug}_CoverLetter.pdf`);
 
-      const canvas = await html2canvas(clone, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: clone.scrollWidth,
-        windowHeight: clone.scrollHeight,
-        onclone: (clonedDoc) => {
-          // Additional processing on cloned document if needed
-          const clonedElement = clonedDoc.body.querySelector('[style*="position: absolute"]') as HTMLElement;
-          if (clonedElement) {
-            clonedElement.style.position = 'relative';
-            clonedElement.style.left = '0';
-          }
-        }
-      });
-      
-      // Remove clone
-      document.body.removeChild(clone);
-      
-      // Restore scroll position
-      window.scrollTo(0, scrollY);
-      
-      const imgData = canvas.toDataURL('image/png', 1.0);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-        compress: true
-      });
-      
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfPageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pdfWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      let heightLeft = imgHeight;
-      let position = 0;
-      // Add first page
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= pdfPageHeight;
-      
-      // Add subsequent pages if content overflows
-      while (heightLeft > 0) {
-        position -= pdfPageHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-        heightLeft -= pdfPageHeight;
-      }
-      
-      const filename = activeTab === 'resume' 
-        ? `${resumeData.personalInfo.name.replace(/\s+/g, '_')}_Resume.pdf`
-        : `${resumeData.personalInfo.name.replace(/\s+/g, '_')}_CoverLetter.pdf`;
-      
-      pdf.save(filename);
+      // Restore original tab
+      setActiveTab(prevTab);
     } catch (err) {
-      console.error('PDF Generation Error:', err);
-      alert('Failed to generate PDF. Please try again. Error: ' + (err instanceof Error ? err.message : String(err)));
+      console.error('PDF error:', err);
+      alert('Failed to generate PDF: ' + (err instanceof Error ? err.message : String(err)));
+      setActiveTab(prevTab);
     } finally {
       setIsDownloading(false);
       if (wasEditing) setIsEditing(true);
@@ -446,15 +460,9 @@ export default function App() {
                   )}
                 >
                   {isDownloading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Preparing PDF...
-                    </>
+                    <><Loader2 className="w-4 h-4 animate-spin" />Generating PDF...</>
                   ) : (
-                    <>
-                      <Download className="w-4 h-4" />
-                      Download {activeTab === 'resume' ? 'Resume' : 'Cover Letter'}
-                    </>
+                    <><Download className="w-4 h-4" />Download PDF</>
                   )}
                 </button>
                 <button
@@ -706,35 +714,33 @@ export default function App() {
             {/* Content Container */}
             <div className="flex flex-col items-center">
               <div className="mb-12 relative">
-                {/* Page Break Indicators (UI only, not captured in PDF) */}
-                {!isDownloading && (
-                  <div className="absolute top-0 left-[-80px] w-[calc(100%+160px)] h-full pointer-events-none z-10">
-                    {/* Page 1 Label */}
-                    <div className="absolute top-4 left-0 flex items-center justify-center">
-                      <div className="bg-white px-3 py-1 rounded-full shadow-sm border border-slate-200">
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest font-sans">Page 1</span>
-                      </div>
+                {/* Page Break Indicators (UI only, not printed) */}
+                <div className="absolute top-0 left-[-80px] w-[calc(100%+160px)] h-full pointer-events-none z-10">
+                  {/* Page 1 Label */}
+                  <div className="absolute top-4 left-0 flex items-center justify-center">
+                    <div className="bg-white px-3 py-1 rounded-full shadow-sm border border-slate-200">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest font-sans">Page 1</span>
                     </div>
-
-                    {activeTab === 'resume' && (
-                      <>
-                        {/* Page 1 to 2 Gap */}
-                        <div className="absolute top-[297mm] left-0 right-0 h-16 bg-slate-100 border-y border-slate-200 flex items-center justify-center">
-                          <div className="bg-white px-6 py-2 rounded-full shadow-lg border border-slate-200 flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-                            <span className="text-[11px] text-slate-600 font-bold uppercase tracking-widest font-sans">Page 2 starts here</span>
-                          </div>
-                        </div>
-                      </>
-                    )}
                   </div>
-                )}
+
+                  {activeTab === 'resume' && (
+                    <>
+                      {/* Page 1 to 2 Gap */}
+                      <div className="absolute top-[297mm] left-0 right-0 h-16 bg-slate-100 border-y border-slate-200 flex items-center justify-center">
+                        <div className="bg-white px-6 py-2 rounded-full shadow-lg border border-slate-200 flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                          <span className="text-[11px] text-slate-600 font-bold uppercase tracking-widest font-sans">Page 2 starts here</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 <div className="shadow-2xl rounded-sm overflow-hidden bg-white">
                   <div 
                     ref={resumeRef}
                     className={cn(
-                      "bg-white w-[210mm] min-h-[297mm] p-[20mm] font-serif text-[#1a1a1a] leading-relaxed overflow-visible",
+                      "bg-white w-[210mm] min-h-[297mm] px-[10mm] py-[20mm] font-serif text-[#1a1a1a] leading-relaxed overflow-visible",
                       isEditing && "ring-4 ring-indigo-100"
                     )}
                   >
@@ -828,10 +834,7 @@ export default function App() {
                       )}
                     </div>
 
-                    <div className="mt-12">
-                      <p className="text-sm">Sincerely,</p>
-                      <p className="text-sm font-bold mt-4">{resumeData.personalInfo.name}</p>
-                    </div>
+
                   </div>
                 )}
 

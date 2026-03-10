@@ -1,11 +1,11 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Fallback model list in priority order
+// Fallback model list in priority order (verified available via ListModels API)
 const MODELS = [
-  "gemini-3-flash-preview",
-  "gemini-2.0-flash-exp",
-  "gemini-1.5-flash",
-  "gemini-1.5-pro"
+  "gemini-2.5-flash",
+  "gemini-2.5-pro",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
 ];
 
 async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
@@ -14,15 +14,16 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3): Promis
       return await fn();
     } catch (error: any) {
       const isLastAttempt = i === maxRetries - 1;
-      const is503Error = error?.message?.includes('503') || error?.message?.includes('UNAVAILABLE') || error?.message?.includes('high demand');
-      
-      if (isLastAttempt || !is503Error) {
+      const msg = error?.message || '';
+      const isRetryable = msg.includes('503') || msg.includes('UNAVAILABLE') || msg.includes('high demand') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('Too Many Requests');
+
+      if (isLastAttempt || !isRetryable) {
         throw error;
       }
       
-      // Exponential backoff: 2s, 4s, 8s
-      const delay = Math.pow(2, i + 1) * 1000;
-      console.log(`Retry attempt ${i + 1}/${maxRetries} after ${delay}ms...`);
+      // Exponential backoff: 3s, 9s, 27s
+      const delay = Math.pow(3, i + 1) * 1000;
+      console.log(`Retry attempt ${i + 1}/${maxRetries} after ${delay / 1000}s...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
