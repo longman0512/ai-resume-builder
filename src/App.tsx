@@ -100,6 +100,8 @@ export default function App() {
         if (window.aistudio?.openSelectKey) {
           await window.aistudio.openSelectKey();
         }
+      } else if (errorMessage.includes('503') || errorMessage.includes('UNAVAILABLE') || errorMessage.includes('high demand')) {
+        setError('The AI service is currently experiencing high demand. The system will automatically retry. Please wait a moment...');
       } else {
         setError(`Failed to generate resume: ${errorMessage}. Please check your API key or try again later.`);
       }
@@ -178,14 +180,50 @@ export default function App() {
       // Small delay to ensure any pending renders are complete and scroll has settled
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      const canvas = await html2canvas(resumeRef.current, {
+      // Convert oklch colors to rgb before rendering
+      const convertOklchToRgb = (element: HTMLElement) => {
+        const computedStyle = window.getComputedStyle(element);
+        const properties = ['color', 'background-color', 'border-color', 'border-top-color', 'border-bottom-color', 'border-left-color', 'border-right-color'];
+        
+        properties.forEach(prop => {
+          const value = computedStyle.getPropertyValue(prop);
+          if (value && value.includes('oklch')) {
+            element.style.setProperty(prop, value, 'important');
+          }
+        });
+        
+        // Recursively convert children
+        Array.from(element.children).forEach(child => convertOklchToRgb(child as HTMLElement));
+      };
+      
+      // Create a clone to avoid modifying the original
+      const clone = resumeRef.current.cloneNode(true) as HTMLElement;
+      document.body.appendChild(clone);
+      clone.style.position = 'absolute';
+      clone.style.left = '-9999px';
+      
+      // Force style computation
+      convertOklchToRgb(clone);
+
+      const canvas = await html2canvas(clone, {
         scale: 2,
         useCORS: true,
-        logging: true, // Enable logging for debugging
+        logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: resumeRef.current.scrollWidth,
-        windowHeight: resumeRef.current.scrollHeight,
+        windowWidth: clone.scrollWidth,
+        windowHeight: clone.scrollHeight,
+        onclone: (clonedDoc) => {
+          // Additional processing on cloned document if needed
+          const clonedElement = clonedDoc.body.querySelector('[style*="position: absolute"]') as HTMLElement;
+          if (clonedElement) {
+            clonedElement.style.position = 'relative';
+            clonedElement.style.left = '0';
+          }
+        }
       });
+      
+      // Remove clone
+      document.body.removeChild(clone);
       
       // Restore scroll position
       window.scrollTo(0, scrollY);
@@ -205,20 +243,16 @@ export default function App() {
       
       let heightLeft = imgHeight;
       let position = 0;
-      const maxPages = activeTab === 'resume' ? 2 : 1;
-      let pageCount = 1;
-      
       // Add first page
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
       heightLeft -= pdfPageHeight;
       
-      // Add subsequent pages if content overflows and within limit
-      while (heightLeft > 0 && pageCount < maxPages) {
+      // Add subsequent pages if content overflows
+      while (heightLeft > 0) {
         position -= pdfPageHeight;
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
         heightLeft -= pdfPageHeight;
-        pageCount++;
       }
       
       const filename = activeTab === 'resume' 
@@ -682,31 +716,13 @@ export default function App() {
                       </div>
                     </div>
 
-                    {activeTab === 'resume' ? (
+                    {activeTab === 'resume' && (
                       <>
                         {/* Page 1 to 2 Gap */}
                         <div className="absolute top-[297mm] left-0 right-0 h-16 bg-slate-100 border-y border-slate-200 flex items-center justify-center">
                           <div className="bg-white px-6 py-2 rounded-full shadow-lg border border-slate-200 flex items-center gap-3">
                             <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
                             <span className="text-[11px] text-slate-600 font-bold uppercase tracking-widest font-sans">Page 2 starts here</span>
-                          </div>
-                        </div>
-                        
-                        {/* Page 2 to 3 Gap (Warning) */}
-                        <div className="absolute top-[594mm] left-0 right-0 h-16 bg-red-50 border-y border-red-200 flex items-center justify-center">
-                          <div className="bg-white px-6 py-2 rounded-full shadow-lg border border-red-200 flex items-center gap-3">
-                            <AlertCircle className="w-4 h-4 text-red-500" />
-                            <span className="text-[11px] text-red-600 font-bold uppercase tracking-widest font-sans">Limit Exceeded (2 Pages Max)</span>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        {/* Cover Letter 1-page limit warning */}
-                        <div className="absolute top-[297mm] left-0 right-0 h-16 bg-red-50 border-y border-red-200 flex items-center justify-center">
-                          <div className="bg-white px-6 py-2 rounded-full shadow-lg border border-red-200 flex items-center gap-3">
-                            <AlertCircle className="w-4 h-4 text-red-500" />
-                            <span className="text-[11px] text-red-600 font-bold uppercase tracking-widest font-sans">Limit Exceeded (1 Page Max)</span>
                           </div>
                         </div>
                       </>
@@ -718,7 +734,7 @@ export default function App() {
                   <div 
                     ref={resumeRef}
                     className={cn(
-                      "bg-white w-[210mm] min-h-[297mm] p-[20mm] font-serif text-[#1a1a1a] leading-relaxed overflow-hidden",
+                      "bg-white w-[210mm] min-h-[297mm] p-[20mm] font-serif text-[#1a1a1a] leading-relaxed overflow-visible",
                       isEditing && "ring-4 ring-indigo-100"
                     )}
                   >
@@ -801,7 +817,7 @@ export default function App() {
                     <div className="flex-grow">
                       {isEditing ? (
                         <textarea 
-                          className="w-full h-[200mm] p-4 border border-slate-200 rounded focus:border-indigo-500 outline-none text-sm leading-relaxed font-serif"
+                          className="w-full min-h-[200mm] p-4 border border-slate-200 rounded focus:border-indigo-500 outline-none text-sm leading-relaxed font-serif"
                           value={resumeData.coverLetter}
                           onChange={(e) => setResumeData({...resumeData, coverLetter: e.target.value})}
                         />

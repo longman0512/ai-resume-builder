@@ -1,8 +1,63 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
+// Fallback model list in priority order
+const MODELS = [
+  "gemini-3-flash-preview",
+  "gemini-2.0-flash-exp",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro"
+];
+
+async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      const isLastAttempt = i === maxRetries - 1;
+      const is503Error = error?.message?.includes('503') || error?.message?.includes('UNAVAILABLE') || error?.message?.includes('high demand');
+      
+      if (isLastAttempt || !is503Error) {
+        throw error;
+      }
+      
+      // Exponential backoff: 2s, 4s, 8s
+      const delay = Math.pow(2, i + 1) * 1000;
+      console.log(`Retry attempt ${i + 1}/${maxRetries} after ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
+async function generateWithFallback(ai: GoogleGenAI, prompt: string): Promise<string> {
+  let lastError: Error | null = null;
+  
+  for (const model of MODELS) {
+    try {
+      console.log(`Trying model: ${model}`);
+      const response = await retryWithBackoff(() => 
+        ai.models.generateContent({
+          model,
+          contents: [{ parts: [{ text: prompt }] }],
+          config: {
+            responseMimeType: "application/json"
+          }
+        })
+      );
+      console.log(`Success with model: ${model}`);
+      return response.text;
+    } catch (error: any) {
+      console.warn(`Model ${model} failed:`, error?.message);
+      lastError = error;
+      // Continue to next model
+    }
+  }
+  
+  throw lastError || new Error('All models failed');
+}
+
 export async function generateTailoredResume(currentResume: string, jobDescription: string) {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  const model = "gemini-3-flash-preview";
   
   const prompt = `
     You are an expert career coach and professional resume writer. 
@@ -67,20 +122,11 @@ export async function generateTailoredResume(currentResume: string, jobDescripti
     }
   `;
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: [{ parts: [{ text: prompt }] }],
-    config: {
-      responseMimeType: "application/json"
-    }
-  });
-
-  return response.text;
+  return await generateWithFallback(ai, prompt);
 }
 
 export async function extractJobMetadata(jobDescription: string) {
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  const model = "gemini-3-flash-preview";
 
   const prompt = `
     Extract the company name and the main technology stack/skills from this job description.
@@ -96,13 +142,5 @@ export async function extractJobMetadata(jobDescription: string) {
     }
   `;
 
-  const response = await ai.models.generateContent({
-    model,
-    contents: [{ parts: [{ text: prompt }] }],
-    config: {
-      responseMimeType: "application/json"
-    }
-  });
-
-  return response.text;
+  return await generateWithFallback(ai, prompt);
 }
