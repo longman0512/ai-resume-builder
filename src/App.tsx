@@ -28,6 +28,7 @@ export default function App() {
   const [stackInfo, setStackInfo] = useState('');
   const [saveDescription, setSaveDescription] = useState('');
   const resumeRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     const saved = localStorage.getItem('ai_resumes');
@@ -164,55 +165,42 @@ export default function App() {
   const [isDownloading, setIsDownloading] = useState(false);
 
   const captureTabAsPdf = async (pdf: jsPDF, addNewPage: boolean) => {
-    if (!resumeRef.current) return;
+    if (!contentRef.current) return;
 
-    // Wait for tab content to render fully
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    const element = resumeRef.current;
-
-    // Temporarily remove HTML padding — margins will be added by the PDF
-    const origPadding = element.style.padding;
-    const origWidth = element.style.width;
-    element.style.padding = '0';
-    // Shrink width to content area (210mm - 2*10mm = 190mm)
-    element.style.width = '190mm';
-
-    // Let browser re-layout with removed padding
-    await new Promise(resolve => setTimeout(resolve, 200));
+    const element = contentRef.current;
     element.scrollIntoView({ block: 'start' });
     await new Promise(resolve => setTimeout(resolve, 100));
 
+    // Capture the INNER content div (no padding).
+    // All styling (bullets, spacing, fonts) is preserved since we don't modify the DOM.
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
     });
 
-    // Restore original padding and width immediately
-    element.style.padding = origPadding;
-    element.style.width = origWidth;
-
-    // PDF margins: left/right = 10mm (1cm), top/bottom = 20mm (2cm)
-    const marginX = 10; // 1cm left and right
-    const marginY = 20; // 2cm top and bottom
-    const pdfPageWidth = 210;  // A4 width mm
-    const pdfPageHeight = 297; // A4 height mm
+    // PDF margins: 1cm left/right, 2cm top/bottom
+    const marginX = 10;
+    const marginY = 20;
+    const pdfPageWidth = 210;
+    const pdfPageHeight = 297;
     const contentWidth = pdfPageWidth - 2 * marginX;   // 190mm
     const contentHeight = pdfPageHeight - 2 * marginY; // 257mm
 
-    // How many canvas pixels correspond to contentHeight (257mm) of PDF?
-    const totalImgHeightMm = (canvas.height * contentWidth) / canvas.width;
-    const pixelsPerMm = canvas.height / totalImgHeightMm;
-    const sliceHeightPx = Math.floor(contentHeight * pixelsPerMm);
-
+    // Scale: how tall is the full image in mm when fit to contentWidth?
+    const imgHeightMm = (canvas.height * contentWidth) / canvas.width;
+    // How many canvas pixels per mm at this scale
+    const pxPerMm = canvas.height / imgHeightMm;
+    // Slice height in canvas pixels for 257mm of content
+    const sliceHeightPx = Math.floor(contentHeight * pxPerMm);
     const totalPages = Math.ceil(canvas.height / sliceHeightPx);
 
     for (let page = 0; page < totalPages; page++) {
       if (page === 0 && addNewPage) pdf.addPage();
       if (page > 0) pdf.addPage();
 
-      // Slice a chunk from the full canvas for this page
       const srcY = page * sliceHeightPx;
       const srcH = Math.min(sliceHeightPx, canvas.height - srcY);
 
@@ -222,15 +210,15 @@ export default function App() {
       const ctx = pageCanvas.getContext('2d');
       if (!ctx) continue;
 
-      // Fill white background, then draw the slice
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
       ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
 
       const pageImgData = pageCanvas.toDataURL('image/png', 1.0);
-      const sliceHeightMm = (srcH * contentWidth) / canvas.width;
+      const sliceMm = (srcH * contentWidth) / canvas.width;
 
-      pdf.addImage(pageImgData, 'PNG', marginX, marginY, contentWidth, sliceHeightMm, undefined, 'FAST');
+      // Place with margins on every page
+      pdf.addImage(pageImgData, 'PNG', marginX, marginY, contentWidth, sliceMm, undefined, 'FAST');
     }
   };
 
@@ -744,9 +732,8 @@ export default function App() {
                       isEditing && "ring-4 ring-indigo-100"
                     )}
                   >
-                    {/* Content will flow here. The gaps above are overlays. 
-                        To make the gaps "push" content, we'd need to split the content.
-                        For now, we use overlays to show where the pages end. */}
+                    {/* Inner content div — captured by contentRef for PDF (no padding) */}
+                    <div ref={contentRef}>
                 {activeTab === 'resume' ? (
                   <>
                     {/* Header */}
@@ -896,12 +883,13 @@ export default function App() {
                           )}
                         </div>
                         {(exp.bullets.length > 0 || isEditing) && (
-                          <ul className="list-disc list-outside ml-5 text-sm space-y-1">
+                          <div className="ml-1 text-sm">
                             {exp.bullets.map((bullet, bIdx) => (
-                              <li key={bIdx} className="relative group/bullet">
+                              <div key={bIdx} className="relative group/bullet mb-1">
                                 <div className="flex items-start gap-2">
                                   {isEditing ? (
                                     <>
+                                      <span className="mt-1 select-none">•</span>
                                       <textarea 
                                         className="w-full p-1 border border-transparent hover:border-slate-100 focus:border-indigo-500 outline-none resize-none"
                                         rows={1}
@@ -920,10 +908,13 @@ export default function App() {
                                       </button>
                                     </>
                                   ) : (
-                                    <span>{bullet}</span>
+                                    <>
+                                      <span className="mt-0.5 select-none shrink-0">•</span>
+                                      <span>{bullet}</span>
+                                    </>
                                   )}
                                 </div>
-                              </li>
+                              </div>
                             ))}
                             {isEditing && (
                               <button 
@@ -933,7 +924,7 @@ export default function App() {
                                 <PlusCircle className="w-3 h-3" /> Add Achievement
                               </button>
                             )}
-                          </ul>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -1069,9 +1060,10 @@ export default function App() {
                 </section>
                   </>
                 )}
-              </div>
-            </div>
-          </div>
+                    </div>{/* close contentRef */}
+                  </div>{/* close resumeRef */}
+                </div>{/* close shadow wrapper */}
+              </div>{/* close mb-12 relative */}
               
               <button
                 onClick={() => {
