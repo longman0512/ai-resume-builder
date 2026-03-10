@@ -21,13 +21,14 @@ export async function generateTailoredResume(currentResume: string, jobDescripti
        - Experience skeleton (Company Names and Employment Periods ONLY).
     2. IGNORE: Completely ignore all existing professional summaries, job descriptions, bullet points, and skills from the "Current Resume". Do NOT use them as a reference.
     3. GENERATE (TAILORED CONTENT):
-       - Based ONLY on the "Job Description", generate a "Target Job Title" and a "Profile" summary.
+       - TARGET LENGTH: **STRICTLY LIMIT the resume to EXACTLY 2 A4 pages.** Do not exceed this.
+       - Based ONLY on the "Job Description", generate a "Target Job Title" and an expanded "Profile" summary (approx. 100-150 words).
        - IDENTIFY: Find the main product, core service, or business domain mentioned in the "Job Description".
-       - For each company in the "Experience skeleton", generate a "Role" and 3-4 "bullets" (achievements/responsibilities) that are perfectly tailored to the "Job Description". 
-       - These bullets should describe what a professional in that role *would* have done to be a perfect fit for the target job, using the technologies and methodologies requested in the JD (e.g., C#, .NET, Agile).
+       - For each company in the "Experience skeleton", generate a "Role" and **6-8 detailed "bullets"** (achievements/responsibilities) that are perfectly tailored to the "Job Description". 
+       - These bullets should be substantial, describing what a professional in that role *would* have done to be a perfect fit for the target job, using the technologies and methodologies requested in the JD (e.g., C#, .NET, Agile).
        - IMPORTANT: Integrate mentions of the identified main product or domain into the experience bullet points to show direct relevance.
-       - Generate a "skills" section that lists the core technologies from the "Job Description".
-       - Generate a "coverLetter" (approx. 250-350 words) that is highly professional, persuasive, and specifically addresses the hiring manager. It should highlight the candidate's relevant skills and enthusiasm for the role and the company's mission/product.
+       - Generate an extensive "skills" section that lists the core technologies from the "Job Description", categorized logically.
+       - Generate a "coverLetter" (approx. 300-400 words) that is highly professional, persuasive, and specifically addresses the hiring manager. It should fit comfortably on one A4 page.
     4. ACCURACY: Ensure the generated content is professional, impactful, and plausible within the provided timeline.
     5. STRUCTURE: Output the result in the strict JSON format below.
     

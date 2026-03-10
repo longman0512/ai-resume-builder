@@ -166,7 +166,10 @@ export default function App() {
       return;
     }
     
+    const wasEditing = isEditing;
+    if (wasEditing) setIsEditing(false);
     setIsDownloading(true);
+    
     try {
       // Store original scroll position
       const scrollY = window.scrollY;
@@ -196,19 +199,39 @@ export default function App() {
       });
       
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pdfPageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pdfWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      let heightLeft = imgHeight;
+      let position = 0;
+      const maxPages = activeTab === 'resume' ? 2 : 1;
+      let pageCount = 1;
+      
+      // Add first page
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= pdfPageHeight;
+      
+      // Add subsequent pages if content overflows and within limit
+      while (heightLeft > 0 && pageCount < maxPages) {
+        position -= pdfPageHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+        heightLeft -= pdfPageHeight;
+        pageCount++;
+      }
       
       const filename = activeTab === 'resume' 
         ? `${resumeData.personalInfo.name.replace(/\s+/g, '_')}_Resume.pdf`
         : `${resumeData.personalInfo.name.replace(/\s+/g, '_')}_CoverLetter.pdf`;
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
       pdf.save(filename);
     } catch (err) {
       console.error('PDF Generation Error:', err);
       alert('Failed to generate PDF. Please try again. Error: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsDownloading(false);
+      if (wasEditing) setIsEditing(true);
     }
   };
 
@@ -648,13 +671,60 @@ export default function App() {
 
             {/* Content Container */}
             <div className="flex flex-col items-center">
-              <div 
-                ref={resumeRef}
-                className={cn(
-                  "bg-white shadow-2xl w-[210mm] min-h-[297mm] p-[20mm] font-serif text-[#1a1a1a] leading-relaxed overflow-hidden",
-                  isEditing && "ring-4 ring-indigo-100"
+              <div className="mb-12 relative">
+                {/* Page Break Indicators (UI only, not captured in PDF) */}
+                {!isDownloading && (
+                  <div className="absolute top-0 left-[-80px] w-[calc(100%+160px)] h-full pointer-events-none z-10">
+                    {/* Page 1 Label */}
+                    <div className="absolute top-4 left-0 flex items-center justify-center">
+                      <div className="bg-white px-3 py-1 rounded-full shadow-sm border border-slate-200">
+                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest font-sans">Page 1</span>
+                      </div>
+                    </div>
+
+                    {activeTab === 'resume' ? (
+                      <>
+                        {/* Page 1 to 2 Gap */}
+                        <div className="absolute top-[297mm] left-0 right-0 h-16 bg-slate-100 border-y border-slate-200 flex items-center justify-center">
+                          <div className="bg-white px-6 py-2 rounded-full shadow-lg border border-slate-200 flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                            <span className="text-[11px] text-slate-600 font-bold uppercase tracking-widest font-sans">Page 2 starts here</span>
+                          </div>
+                        </div>
+                        
+                        {/* Page 2 to 3 Gap (Warning) */}
+                        <div className="absolute top-[594mm] left-0 right-0 h-16 bg-red-50 border-y border-red-200 flex items-center justify-center">
+                          <div className="bg-white px-6 py-2 rounded-full shadow-lg border border-red-200 flex items-center gap-3">
+                            <AlertCircle className="w-4 h-4 text-red-500" />
+                            <span className="text-[11px] text-red-600 font-bold uppercase tracking-widest font-sans">Limit Exceeded (2 Pages Max)</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Cover Letter 1-page limit warning */}
+                        <div className="absolute top-[297mm] left-0 right-0 h-16 bg-red-50 border-y border-red-200 flex items-center justify-center">
+                          <div className="bg-white px-6 py-2 rounded-full shadow-lg border border-red-200 flex items-center gap-3">
+                            <AlertCircle className="w-4 h-4 text-red-500" />
+                            <span className="text-[11px] text-red-600 font-bold uppercase tracking-widest font-sans">Limit Exceeded (1 Page Max)</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
-              >
+
+                <div className="shadow-2xl rounded-sm overflow-hidden bg-white">
+                  <div 
+                    ref={resumeRef}
+                    className={cn(
+                      "bg-white w-[210mm] min-h-[297mm] p-[20mm] font-serif text-[#1a1a1a] leading-relaxed overflow-hidden",
+                      isEditing && "ring-4 ring-indigo-100"
+                    )}
+                  >
+                    {/* Content will flow here. The gaps above are overlays. 
+                        To make the gaps "push" content, we'd need to split the content.
+                        For now, we use overlays to show where the pages end. */}
                 {activeTab === 'resume' ? (
                   <>
                     {/* Header */}
@@ -978,8 +1048,10 @@ export default function App() {
                     ))}
                   </div>
                 </section>
-              </>
-            )}
+                  </>
+                )}
+              </div>
+            </div>
           </div>
               
               <button
