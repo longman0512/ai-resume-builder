@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 type NotificationType = 'success' | 'error' | 'info';
 
@@ -16,10 +16,16 @@ const ICONS: Record<NotificationType, string> = {
 };
 
 export function useNotification() {
+  const permissionRef = useRef<NotificationPermission>('default');
+
   // Request permission once when the hook mounts
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
+    if (!('Notification' in window)) return;
+    permissionRef.current = Notification.permission;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then((perm) => {
+        permissionRef.current = perm;
+      });
     }
   }, []);
 
@@ -28,18 +34,27 @@ export function useNotification() {
 
     const send = () => {
       const prefix = ICONS[type];
-      new Notification(`${prefix} ${title}`, {
-        body,
-        icon: icon ?? '/favicon.ico',
-        tag: 'resume-builder',   // replaces previous notification instead of stacking
-      });
+      try {
+        const n = new Notification(`${prefix} ${title}`, {
+          body,
+          icon: icon ?? '/icon.png',
+          tag: `resume-builder-${Date.now()}`,
+          silent: false,
+        });
+        // Auto-close after 6 seconds
+        setTimeout(() => n.close(), 6000);
+      } catch (e) {
+        // Notification constructor can throw in some contexts (e.g., insecure origin)
+        console.warn('Desktop notification failed:', e);
+      }
     };
 
-    if (Notification.permission === 'granted') {
+    if (permissionRef.current === 'granted' || Notification.permission === 'granted') {
       send();
     } else if (Notification.permission === 'default') {
-      Notification.requestPermission().then(permission => {
-        if (permission === 'granted') send();
+      Notification.requestPermission().then((perm) => {
+        permissionRef.current = perm;
+        if (perm === 'granted') send();
       });
     }
     // 'denied' → silently skip
