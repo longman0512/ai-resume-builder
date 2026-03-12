@@ -3,6 +3,19 @@
 -- Run this in the Supabase SQL Editor (Dashboard → SQL Editor)
 -- ============================================================
 
+-- ── 0. Helper function to check admin role ────────────────────
+-- SECURITY DEFINER bypasses RLS, avoiding infinite recursion
+-- when admin policies need to check the profiles table.
+
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+
 -- ── 1. Profiles table ─────────────────────────────────────────
 -- Extends Supabase auth.users with app-specific fields.
 -- Automatically created on user signup via a trigger.
@@ -34,32 +47,17 @@ CREATE POLICY "Users can update own profile"
 -- Admins can read ALL profiles (for admin dashboard)
 CREATE POLICY "Admins can read all profiles"
   ON public.profiles FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles AS p
-      WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
-  );
+  USING (public.is_admin());
 
--- Admins can update any profile (role toggle, delete)
+-- Admins can update any profile (role toggle)
 CREATE POLICY "Admins can update any profile"
   ON public.profiles FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles AS p
-      WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
-  );
+  USING (public.is_admin());
 
 -- Admins can delete any profile
 CREATE POLICY "Admins can delete any profile"
   ON public.profiles FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles AS p
-      WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
-  );
+  USING (public.is_admin());
 
 -- Allow insert during signup (service role or the user themselves)
 CREATE POLICY "Users can insert own profile"
@@ -139,12 +137,7 @@ CREATE POLICY "Users can delete own resumes"
 -- Admins can read all resumes (for analytics)
 CREATE POLICY "Admins can read all resumes"
   ON public.saved_resumes FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles AS p
-      WHERE p.id = auth.uid() AND p.role = 'admin'
-    )
-  );
+  USING (public.is_admin());
 
 
 -- ── 4. Seed default admin ─────────────────────────────────────

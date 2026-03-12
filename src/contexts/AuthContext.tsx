@@ -58,29 +58,41 @@ export function useAuth() {
 
 // ── Fetch profile helper ──────────────────────────────────────────
 async function fetchProfile(userId: string): Promise<AuthUser | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single();
+  try {
+    // Race against a timeout to prevent hanging
+    const profilePromise = supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
 
-  if (error || !data) {
-    // Profile doesn't exist yet — try to build from Supabase auth user
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (authUser) {
-      return {
-        id: authUser.id,
-        name: (authUser.user_metadata?.name as string) || '',
-        email: authUser.email || '',
-        role: 'user',
-        resumesBuilt: 0,
-        createdAt: authUser.created_at || new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-      };
+    const result = await Promise.race([
+      profilePromise,
+      new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: 'Timeout' } }), 5000)
+      ),
+    ]);
+
+    if (!result.error && result.data) {
+      return profileToAuthUser(result.data);
     }
-    return null;
+  } catch (err) {
+    console.warn('Could not fetch profile from DB:', err);
   }
-  return profileToAuthUser(data);
+  return null;
+}
+
+// Build an AuthUser from the Supabase auth user object (fallback when profiles table is missing)
+function authUserFromSession(supabaseUser: { id: string; email?: string; user_metadata?: Record<string, unknown>; created_at?: string }): AuthUser {
+  return {
+    id: supabaseUser.id,
+    name: (supabaseUser.user_metadata?.name as string) || '',
+    email: supabaseUser.email || '',
+    role: 'user',
+    resumesBuilt: 0,
+    createdAt: supabaseUser.created_at || new Date().toISOString(),
+    lastLoginAt: new Date().toISOString(),
+  };
 }
 
 // ── Provider ──────────────────────────────────────────────────────
@@ -90,18 +102,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Listen for Supabase auth changes and restore session
   useEffect(() => {
+    let isMounted = true;
+
     // Get initial session
     const initSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          const profile = await fetchProfile(session.user.id);
-          setUser(profile);
+        if (session?.user && isMounted) {
+          const profile = await fetchProfile(session.user.id) || authUserFromSession(session.user);
+          if (isMounted) setUser(profile);
         }
       } catch (err) {
         console.error('Failed to restore session:', err);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     };
 
@@ -110,20 +124,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth state changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!isMounted) return;
         try {
-          if (event === 'SIGNED_IN' && session?.user) {
-            const profile = await fetchProfile(session.user.id);
-            setUser(profile);
+          if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+            const profile = await fetchProfile(session.user.id) || authUserFromSession(session.user);
+            if (isMounted) setUser(profile);
           } else if (event === 'SIGNED_OUT') {
             setUser(null);
           }
         } catch (err) {
           console.error('Auth state change error:', err);
+        } finally {
+          // Also clear loading on auth state change in case initSession is slow
+          if (isMounted) setIsLoading(false);
         }
       }
     );
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, []);
@@ -136,12 +155,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!data.user) return { ok: false, error: 'Login failed.' };
 
       // Update last login (ignore errors — table might not exist yet)
-      await supabase
-        .from('profiles')
-        .update({ last_login_at: new Date().toISOString() })
-        .eq('id', data.user.id);
+      try {
+        await supabase
+          .from('profiles')
+          .update({ last_login_at: new Date().toISOString() })
+          .eq('id', data.user.id);
+      } catch { /* ignore */ }
 
-      const profile = await fetchProfile(data.user.id);
+      // Try DB profile, fallback to auth user data
+      const profile = await fetchProfile(data.user.id) || authUserFromSession(data.user);
       setUser(profile);
       return { ok: true };
     } catch (err) {
@@ -166,7 +188,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Profile is auto-created by the database trigger
       // Wait a moment for the trigger to execute, then fetch the profile
       await new Promise((r) => setTimeout(r, 500));
-      const profile = await fetchProfile(data.user.id);
+      const profile = await fetchProfile(data.user.id) || authUserFromSession(data.user);
       setUser(profile);
       return { ok: true };
     } catch (err) {
