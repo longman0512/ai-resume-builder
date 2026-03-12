@@ -131,7 +131,7 @@ export async function extractJobMetadata(jobDescription: string) {
 
   const prompt = `
     Extract the company name and the main technology stack/skills from this job description.
-    Focus on identifying the primary programming languages, frameworks, and tools mentioned.
+    Focus on identifying the primary programming languages, frameworks, and tools mentioned and relational programming languages, frameworks and tools.
     
     Job Description:
     ${jobDescription}
@@ -141,6 +141,44 @@ export async function extractJobMetadata(jobDescription: string) {
       "company": "Company Name",
       "stack": "Main Stack/Skills (e.g. React, Node.js, TypeScript, AWS)"
     }
+  `;
+
+  return await generateWithFallback(ai, prompt);
+}
+
+export async function generateApplicationAnswers(
+  questions: string[],
+  jobDescription: string,
+  resumeJson: string
+) {
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+  const prompt = `
+    You are an expert job application consultant.
+    You have a candidate's tailored resume and the job description they are applying for.
+    Answer the following application questions on behalf of the candidate.
+
+    Job Description:
+    ${jobDescription}
+
+    Candidate's Resume (JSON):
+    ${resumeJson}
+
+    Application Questions:
+    ${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+
+    Instructions:
+    - Answer each question professionally, concisely, and persuasively (2-5 sentences each).
+    - Use specific details from the resume (skills, experience, achievements) to support each answer.
+    - Align answers with the job description requirements.
+    - Sound natural and human — not generic or robotic.
+    - If the question asks about salary expectations, give a diplomatic open answer.
+    - If the question asks about availability/start date, say "available to start immediately" or "with 2 weeks notice".
+
+    Output as a JSON array of objects:
+    [
+      { "question": "The original question", "answer": "Your professional answer" }
+    ]
   `;
 
   return await generateWithFallback(ai, prompt);

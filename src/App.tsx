@@ -4,12 +4,14 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { FileText, Briefcase, Sparkles, Copy, Download, Loader2, CheckCircle2, AlertCircle, Edit3, Eye, Plus, Trash2, MinusCircle, PlusCircle, LayoutPanelLeft, History, Save, X, Clock, Layers, Table as TableIcon, List, ExternalLink, ChevronRight } from 'lucide-react';
-import { generateTailoredResume, extractJobMetadata } from './services/ai';
+import { FileText, Briefcase, Sparkles, Copy, Download, Loader2, CheckCircle2, AlertCircle, Edit3, Eye, Plus, Trash2, MinusCircle, PlusCircle, LayoutPanelLeft, History, Save, X, Clock, Layers, Table as TableIcon, List, ExternalLink, ChevronRight, MessageSquare, Send } from 'lucide-react';
+import { generateTailoredResume, extractJobMetadata, generateApplicationAnswers } from './services/ai';
 import { cn } from './lib/utils';
 import { ResumeData, SavedResume } from './types';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
+import JSZip from 'jszip';
+import { useNotification } from './hooks/useNotification';
 
 export default function App() {
   const [resume, setResume] = useState('');
@@ -27,8 +29,14 @@ export default function App() {
   const [isExtractingMetadata, setIsExtractingMetadata] = useState(false);
   const [stackInfo, setStackInfo] = useState('');
   const [saveDescription, setSaveDescription] = useState('');
+  const [jobCompany, setJobCompany] = useState('');
+  const [appQuestions, setAppQuestions] = useState<string[]>(['']);
+  const [appAnswers, setAppAnswers] = useState<{ question: string; answer: string }[]>([]);
+  const [isGeneratingAnswers, setIsGeneratingAnswers] = useState(false);
+  const [showQA, setShowQA] = useState(false);
   const resumeRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const { notify } = useNotification();
 
   React.useEffect(() => {
     const saved = localStorage.getItem('ai_resumes');
@@ -74,20 +82,38 @@ export default function App() {
   const handleGenerate = async () => {
     if (!resume.trim() || !jobDesc.trim()) {
       setError('Please provide both your current resume and the job description.');
+      notify({
+        title: 'Missing Information',
+        body: 'Please provide both your current resume and the job description.',
+        type: 'error',
+      });
       return;
     }
 
     setIsGenerating(true);
     setError(null);
     try {
+      // Extract company name & stack FIRST so they're ready for download naming
+      try {
+        const meta = await extractJobMetadata(jobDesc);
+        if (meta) {
+          const m = JSON.parse(meta);
+          setJobCompany(m.company || '');
+          setSaveDescription(m.company || '');
+          setStackInfo(m.stack || '');
+        }
+      } catch { /* non-critical — continue with resume generation */ }
+
       const result = await generateTailoredResume(resume, jobDesc);
       if (result) {
         const parsed = JSON.parse(result) as ResumeData;
         setResumeData(parsed);
         setShowInputs(false);
-        // Auto-fill stack info if possible, or leave blank for user
-        setStackInfo('');
-        setSaveDescription('');
+        notify({
+          title: 'Resume Ready',
+          body: `Your tailored resume for ${parsed.personalInfo?.title ?? 'the role'} has been generated.`,
+          type: 'success',
+        });
       } else {
         throw new Error('No response from AI');
       }
@@ -97,13 +123,28 @@ export default function App() {
       
       if (errorMessage.includes('Requested entity was not found')) {
         setError('API Key selection required. Please select a key to continue.');
+        notify({
+          title: 'API Key Required',
+          body: 'Please select a valid Gemini API key to continue.',
+          type: 'error',
+        });
         if (window.aistudio?.openSelectKey) {
           await window.aistudio.openSelectKey();
         }
       } else if (errorMessage.includes('503') || errorMessage.includes('UNAVAILABLE') || errorMessage.includes('high demand')) {
         setError('The AI service is currently experiencing high demand. The system will automatically retry. Please wait a moment...');
+        notify({
+          title: 'Service Unavailable',
+          body: 'Gemini is experiencing high demand. Retrying automatically — please wait.',
+          type: 'info',
+        });
       } else {
         setError(`Failed to generate resume: ${errorMessage}. Please check your API key or try again later.`);
+        notify({
+          title: 'Resume Generation Failed',
+          body: errorMessage,
+          type: 'error',
+        });
       }
     } finally {
       setIsGenerating(false);
@@ -147,6 +188,12 @@ export default function App() {
     setView('dashboard');
     setStackInfo('');
     setSaveDescription('');
+    setJobCompany('');
+    notify({
+      title: 'Resume Saved',
+      body: `"${newSavedResume.description}" has been saved to your dashboard.`,
+      type: 'success',
+    });
   };
 
   const loadResume = (saved: SavedResume) => {
@@ -164,6 +211,11 @@ export default function App() {
 
   const [isDownloading, setIsDownloading] = useState(false);
 
+  /**
+   * Capture the contentRef as a PDF with real selectable text.
+   * Uses a hidden iframe to render the content with proper styles,
+   * then captures it via html2canvas and places it in jsPDF.
+   */
   const captureTabAsPdf = async (pdf: jsPDF, addNewPage: boolean) => {
     if (!contentRef.current) return;
 
@@ -173,8 +225,6 @@ export default function App() {
     element.scrollIntoView({ block: 'start' });
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Capture the INNER content div (no padding).
-    // All styling (bullets, spacing, fonts) is preserved since we don't modify the DOM.
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
@@ -189,11 +239,8 @@ export default function App() {
     const contentWidth = pdfPageWidth - 2 * marginX;   // 190mm
     const contentHeight = pdfPageHeight - 2 * marginY; // 257mm
 
-    // Scale: how tall is the full image in mm when fit to contentWidth?
     const imgHeightMm = (canvas.height * contentWidth) / canvas.width;
-    // How many canvas pixels per mm at this scale
     const pxPerMm = canvas.height / imgHeightMm;
-    // Slice height in canvas pixels for 257mm of content
     const sliceHeightPx = Math.floor(contentHeight * pxPerMm);
     const totalPages = Math.ceil(canvas.height / sliceHeightPx);
 
@@ -217,7 +264,6 @@ export default function App() {
       const pageImgData = pageCanvas.toDataURL('image/png', 1.0);
       const sliceMm = (srcH * contentWidth) / canvas.width;
 
-      // Place with margins on every page
       pdf.addImage(pageImgData, 'PNG', marginX, marginY, contentWidth, sliceMm, undefined, 'FAST');
     }
   };
@@ -226,7 +272,6 @@ export default function App() {
   const switchTabAndWait = (tab: 'resume' | 'coverLetter'): Promise<void> => {
     return new Promise(resolve => {
       setActiveTab(tab);
-      // Use requestAnimationFrame + setTimeout to ensure React has flushed the update
       requestAnimationFrame(() => {
         setTimeout(resolve, 600);
       });
@@ -234,36 +279,83 @@ export default function App() {
   };
 
   const downloadPDF = async () => {
-    if (!resumeRef.current || !resumeData) return;
+    if (!contentRef.current || !resumeData) return;
 
     const wasEditing = isEditing;
     if (wasEditing) setIsEditing(false);
     setIsDownloading(true);
 
     const prevTab = activeTab;
-    const nameSlug = resumeData.personalInfo.name.replace(/\s+/g, '_');
+    const nameSlug = resumeData.personalInfo.name
+      .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+    // Build zip name: date_company_2stacks
+    const now = new Date();
+    const datePart = now.toISOString().slice(0, 10);
+    const timePart = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+
+    // Company from JD only — fall back to time if not found
+    const companySlug = jobCompany
+      ? jobCompany.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '')
+      : timePart;
+
+    // Stack — take only the first 2 main technologies
+    const topStacks = (stackInfo || 'General')
+      .split(/[,\/|&]+/)
+      .map(s => s.trim().replace(/[^a-zA-Z0-9]+/g, ''))
+      .filter(Boolean)
+      .slice(0, 2)
+      .join('_');
+
+    const folderName = `${datePart}_${companySlug}_${topStacks}`;
+    const resumeFileName = `${nameSlug}_Resume.pdf`;
+    const coverFileName = `${nameSlug}_CoverLetter.pdf`;
 
     try {
-      // 1. Generate Resume PDF
+      // 1. Generate Resume PDF blob
       await switchTabAndWait('resume');
       const resumePdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
       await captureTabAsPdf(resumePdf, false);
-      resumePdf.save(`${nameSlug}_Resume.pdf`);
+      const resumeBlob = resumePdf.output('blob');
 
-      // Small delay between saves so browser doesn't block the second download
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      // 2. Generate Cover Letter PDF
+      // 2. Generate Cover Letter PDF blob
       await switchTabAndWait('coverLetter');
       const coverPdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
       await captureTabAsPdf(coverPdf, false);
-      coverPdf.save(`${nameSlug}_CoverLetter.pdf`);
+      const coverBlob = coverPdf.output('blob');
 
-      // Restore original tab
+      // Restore tab
       setActiveTab(prevTab);
+
+      // 3. Bundle both into a zip: date_company_stack.zip
+      const zip = new JSZip();
+      const folder = zip.folder(folderName)!;
+      folder.file(resumeFileName, resumeBlob);
+      folder.file(coverFileName, coverBlob);
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${folderName}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      notify({
+        title: 'Download Ready',
+        body: `${folderName}.zip — Resume + Cover Letter downloaded.`,
+        type: 'success',
+      });
     } catch (err) {
       console.error('PDF error:', err);
-      alert('Failed to generate PDF: ' + (err instanceof Error ? err.message : String(err)));
+      const errMsg = err instanceof Error ? err.message : String(err);
+      notify({
+        title: 'PDF Download Failed',
+        body: errMsg,
+        type: 'error',
+      });
       setActiveTab(prevTab);
     } finally {
       setIsDownloading(false);
@@ -398,6 +490,7 @@ export default function App() {
               </button>
             )}
             {resumeData && (
+              <>
               <div className="flex bg-slate-100 p-1 rounded-xl">
                 <button
                   onClick={() => setActiveTab('resume')}
@@ -418,6 +511,17 @@ export default function App() {
                   Cover Letter
                 </button>
               </div>
+              <button
+                onClick={() => setShowQA(!showQA)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors text-sm font-medium",
+                  showQA ? "bg-violet-50 border-violet-200 text-violet-600" : "border-slate-200 hover:bg-slate-50"
+                )}
+              >
+                <MessageSquare className="w-4 h-4" />
+                Q&A
+              </button>
+              </>
             )}
             {resumeData && (
               <>
@@ -1065,6 +1169,128 @@ export default function App() {
                 </div>{/* close shadow wrapper */}
               </div>{/* close mb-12 relative */}
               
+              {/* Application Q&A Panel */}
+              {showQA && (
+                <div className="w-full max-w-[210mm] mt-8 bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-slate-700 font-semibold">
+                      <MessageSquare className="w-5 h-5 text-violet-500" />
+                      <h3>Application Questions</h3>
+                    </div>
+                    <span className="text-[10px] font-bold text-violet-600 bg-violet-50 px-2 py-0.5 rounded uppercase tracking-wider border border-violet-100">
+                      AI-Powered
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-500">
+                    Add questions from the job application form. AI will generate answers based on your resume and the job description.
+                  </p>
+
+                  <div className="space-y-3">
+                    {appQuestions.map((q, idx) => (
+                      <div key={idx} className="flex gap-2 items-start">
+                        <span className="mt-2.5 text-xs font-bold text-slate-400 w-5 shrink-0">{idx + 1}.</span>
+                        <textarea
+                          className="flex-1 p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all resize-none bg-slate-50 text-sm"
+                          rows={2}
+                          placeholder="Paste an application question here..."
+                          value={q}
+                          onChange={(e) => {
+                            const updated = [...appQuestions];
+                            updated[idx] = e.target.value;
+                            setAppQuestions(updated);
+                          }}
+                        />
+                        {appQuestions.length > 1 && (
+                          <button
+                            onClick={() => {
+                              setAppQuestions(appQuestions.filter((_, i) => i !== idx));
+                              setAppAnswers([]);
+                            }}
+                            className="mt-2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setAppQuestions([...appQuestions, ''])}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-violet-600 hover:bg-violet-50 rounded-lg transition-colors border border-violet-200"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Question
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const validQuestions = appQuestions.filter(q => q.trim());
+                        if (validQuestions.length === 0) {
+                          notify({ title: 'No Questions', body: 'Please add at least one question.', type: 'error' });
+                          return;
+                        }
+                        setIsGeneratingAnswers(true);
+                        setAppAnswers([]);
+                        try {
+                          const result = await generateApplicationAnswers(
+                            validQuestions,
+                            jobDesc,
+                            JSON.stringify(resumeData)
+                          );
+                          if (result) {
+                            const parsed = JSON.parse(result);
+                            setAppAnswers(Array.isArray(parsed) ? parsed : []);
+                            notify({ title: 'Answers Ready', body: `Generated answers for ${validQuestions.length} question(s).`, type: 'success' });
+                          }
+                        } catch (err) {
+                          console.error('Q&A error:', err);
+                          notify({ title: 'Answer Generation Failed', body: err instanceof Error ? err.message : 'Unknown error', type: 'error' });
+                        } finally {
+                          setIsGeneratingAnswers(false);
+                        }
+                      }}
+                      disabled={isGeneratingAnswers}
+                      className={cn(
+                        "flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white rounded-lg transition-all shadow-sm",
+                        isGeneratingAnswers ? "bg-slate-400 cursor-wait" : "bg-violet-600 hover:bg-violet-700"
+                      )}
+                    >
+                      {isGeneratingAnswers ? (
+                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating...</>
+                      ) : (
+                        <><Send className="w-3.5 h-3.5" /> Generate Answers</>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Generated Answers */}
+                  {appAnswers.length > 0 && (
+                    <div className="mt-4 space-y-4 border-t border-slate-100 pt-4">
+                      <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                        Generated Answers
+                      </h4>
+                      {appAnswers.map((qa, idx) => (
+                        <div key={idx} className="bg-slate-50 rounded-xl p-4 space-y-2 border border-slate-100">
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Q{idx + 1}: {qa.question}</p>
+                          <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{qa.answer}</p>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(qa.answer);
+                              notify({ title: 'Copied', body: `Answer ${idx + 1} copied to clipboard.`, type: 'success' });
+                            }}
+                            className="flex items-center gap-1 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 uppercase tracking-wider mt-1"
+                          >
+                            <Copy className="w-3 h-3" /> Copy Answer
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={() => {
                   setResumeData(null);
