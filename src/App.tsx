@@ -4,7 +4,8 @@
  */
 
 import React, { useState, useEffect, useContext, createContext, useCallback } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
+import { normalizeResumeData } from './lib/contactUtils';
 import { ResumeData } from './types';
 import { STORAGE_KEYS } from './constants';
 
@@ -13,8 +14,11 @@ import { useNotification } from './hooks/useNotification';
 import { useSavedResumes } from './hooks/useSavedResumes';
 import { useResumeEditor } from './hooks/useResumeEditor';
 import { useResumeGeneration } from './hooks/useResumeGeneration';
-import { usePdfDownload } from './hooks/usePdfDownload';
+import { useDocxDownload } from './hooks/useDocxDownload';
 import { useApplicationQA } from './hooks/useApplicationQA';
+import { useResumeDownloads } from './hooks/useResumeDownloads';
+import { useBaseProfiles } from './hooks/useBaseProfiles';
+import type { BaseProfile } from './hooks/useBaseProfiles';
 import { extractJobMetadata } from './services/ai';
 
 // Auth
@@ -50,9 +54,9 @@ interface AppContextType {
   editor: ReturnType<typeof useResumeEditor>;
   generation: ReturnType<typeof useResumeGeneration>;
   isDownloading: boolean;
-  resumeRef: ReturnType<typeof usePdfDownload>['resumeRef'];
-  contentRef: ReturnType<typeof usePdfDownload>['contentRef'];
-  downloadPDF: ReturnType<typeof usePdfDownload>['downloadPDF'];
+  resumeRef: ReturnType<typeof useDocxDownload>['resumeRef'];
+  contentRef: ReturnType<typeof useDocxDownload>['contentRef'];
+  downloadDocx: ReturnType<typeof useDocxDownload>['downloadDocx'];
   qa: ReturnType<typeof useApplicationQA>;
   handleGenerate: () => void;
   handleDownload: () => void;
@@ -60,6 +64,11 @@ interface AppContextType {
   handleSaveResume: () => void;
   handleGenerateAnswers: () => void;
   handleCopyAnswer: (answer: string, idx: number) => void;
+  baseProfiles: BaseProfile[];
+  activeResumeId: string | null;
+  loadResumeById: (id: string) => Promise<void>;
+  clearResumeSession: () => void;
+  isLoadingResume: boolean;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -71,11 +80,12 @@ export function useAppContext() {
 }
 
 export default function App() {
-  const location = useLocation();
   const navigate = useNavigate();
 
   // ── Local UI state ──────────────────────────────────────────────
   const [resume, setResume] = useState('');
+  const [activeResumeId, setActiveResumeId] = useState<string | null>(null);
+  const [isLoadingResume, setIsLoadingResume] = useState(false);
   const [jobDesc, setJobDesc] = useState('');
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -90,8 +100,10 @@ export default function App() {
   const { savedResumes, saveResume, deleteSavedResume } = useSavedResumes();
   const editor = useResumeEditor(resumeData, setResumeData);
   const generation = useResumeGeneration();
-  const { isDownloading, resumeRef, contentRef, downloadPDF } = usePdfDownload();
+  const { isDownloading, resumeRef, contentRef, downloadDocx } = useDocxDownload();
   const qa = useApplicationQA();
+  const { createResume, updateResume, getResumeById } = useResumeDownloads();
+  const { baseProfiles } = useBaseProfiles();
 
   // ── Persist base resume ─────────────────────────────────────────
   useEffect(() => {
@@ -109,28 +121,115 @@ export default function App() {
   }, [generation.checkApiKey]);
 
   // ── Auth ─────────────────────────────────────────────────────────
-  const { incrementResumeCount } = useAuth();
+  const { incrementResumeCount, incrementDownloadCount } = useAuth();
+
+  const clearResumeSession = useCallback(() => {
+    setResumeData(null);
+    setActiveResumeId(null);
+    setIsEditing(false);
+    setShowInputs(false);
+    setActiveTab('resume');
+    generation.setStackInfo('');
+    generation.setJobCompany('');
+  }, [generation]);
+
+  const loadResumeById = useCallback(async (id: string) => {
+    setIsLoadingResume(true);
+    try {
+      const record = await getResumeById(id);
+      if (!record) {
+        notify({ title: 'Resume not found', body: 'This resume may have been deleted.', type: 'error' });
+        clearResumeSession();
+        navigate('/builder', { replace: true });
+        return;
+      }
+      setResumeData(normalizeResumeData(record.resumeData));
+      setResume(record.originalResume);
+      setJobDesc(record.jobDesc);
+      generation.setStackInfo(record.stackInfo);
+      generation.setJobCompany(record.jobCompany);
+      setActiveResumeId(record.id);
+    } finally {
+      setIsLoadingResume(false);
+    }
+  }, [getResumeById, notify, clearResumeSession, navigate, generation]);
 
   // ── Handlers ────────────────────────────────────────────────────
   const handleGenerate = useCallback(() => {
     generation.handleGenerate(resume, jobDesc, {
-      onSuccess: async (data) => {
+      onSuccess: async (data, meta) => {
         setResumeData(data);
-        await incrementResumeCount();
+        await incrementResumeCount({
+          jobCompany: meta.jobCompany,
+          stackInfo: meta.stackInfo,
+        });
+        // Do NOT save to history on Generate.
+        // History is created only when the user downloads.
+        setActiveResumeId(null);
+        generation.setJobCompany(meta.jobCompany);
+        generation.setStackInfo(meta.stackInfo);
+        navigate('/builder', { replace: true });
       },
       notify,
     });
-  }, [resume, jobDesc, generation, notify, incrementResumeCount]);
+  }, [resume, jobDesc, generation, notify, incrementResumeCount, navigate]);
 
-  const handleDownload = useCallback(() => {
-    downloadPDF({
-      activeTab,
-      setActiveTab,
+  const handleDownload = useCallback(async () => {
+    if (!resumeData) return;
+
+    const result = await downloadDocx({
+      resumeData,
       jobCompany: generation.jobCompany,
       stackInfo: generation.stackInfo,
       notify,
     });
-  }, [activeTab, downloadPDF, generation.jobCompany, generation.stackInfo, notify]);
+
+    if (!result.ok) return;
+
+    const payload = {
+      zipName: result.zipName,
+      jobCompany: generation.jobCompany,
+      stackInfo: generation.stackInfo,
+      resumeData,
+      originalResume: resume,
+      jobDesc,
+    };
+
+    let saved: Awaited<ReturnType<typeof updateResume>> = null;
+    if (activeResumeId) {
+      saved = await updateResume(activeResumeId, payload);
+    } else {
+      saved = await createResume(payload);
+      if (saved) {
+        setActiveResumeId(saved.id);
+        navigate(`/builder/${saved.id}`, { replace: true });
+      }
+    }
+
+    if (!saved) {
+      notify({
+        title: 'History not updated',
+        body: 'Download succeeded but saving to history failed. Please try downloading again.',
+        type: 'error',
+      });
+      return;
+    }
+
+    await incrementDownloadCount();
+  }, [
+    downloadDocx,
+    generation.jobCompany,
+    generation.stackInfo,
+    notify,
+    resumeData,
+    createResume,
+    updateResume,
+    activeResumeId,
+    navigate,
+    resume,
+    jobDesc,
+    incrementDownloadCount,
+  ]);
 
   const handleOpenSaveModal = useCallback(async () => {
     setSaveModalOpen(true);
@@ -183,12 +282,6 @@ export default function App() {
     notify({ title: 'Copied', body: `Answer ${idx + 1} copied to clipboard.`, type: 'success' });
   }, [notify]);
 
-  // ── Derive "view" from current route for the Header ─────────────
-  const view = location.pathname === '/history' ? 'dashboard' : 'editor';
-  const setView = (v: 'editor' | 'dashboard') => {
-    navigate(v === 'dashboard' ? '/history' : '/');
-  };
-
   // ── Context value ───────────────────────────────────────────────
   const contextValue: AppContextType = {
     resume, setResume,
@@ -204,7 +297,7 @@ export default function App() {
     savedResumes, saveResume, deleteSavedResume,
     editor,
     generation,
-    isDownloading, resumeRef, contentRef, downloadPDF,
+    isDownloading, resumeRef, contentRef, downloadDocx,
     qa,
     handleGenerate,
     handleDownload,
@@ -212,6 +305,11 @@ export default function App() {
     handleSaveResume,
     handleGenerateAnswers,
     handleCopyAnswer,
+    baseProfiles,
+    activeResumeId,
+    loadResumeById,
+    clearResumeSession,
+    isLoadingResume,
   };
 
   // ── Render ──────────────────────────────────────────────────────
@@ -219,8 +317,6 @@ export default function App() {
     <AppContext.Provider value={contextValue}>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
         <Header
-          view={view}
-          setView={setView}
           resumeData={resumeData}
           isEditing={isEditing}
           setIsEditing={setIsEditing}

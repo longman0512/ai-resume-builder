@@ -36,6 +36,17 @@ export interface SavedResume {
   jobDesc: string;
 }
 
+export interface ResumeDownload {
+  id: string;
+  zipName: string;
+  jobCompany: string;
+  stackInfo: string;
+  createdAt: string;
+  resumeData: ResumeData;
+  originalResume: string;
+  jobDesc: string;
+}
+
 declare global {
   interface Window {
     aistudio: {

@@ -8,7 +8,9 @@ export interface AuthUser {
   name: string;
   email: string;
   role: 'user' | 'admin';
+  status: 'approved' | 'rejected';
   resumesBuilt: number;
+  downloadsCount: number;
   createdAt: string;
   lastLoginAt: string;
 }
@@ -17,13 +19,16 @@ interface AuthContextType {
   user: AuthUser | null;
   isAdmin: boolean;
   isLoading: boolean;
+  refreshUser: () => Promise<void>;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   signup: (name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => Promise<void>;
-  incrementResumeCount: () => Promise<void>;
+  incrementResumeCount: (meta?: { jobCompany?: string; stackInfo?: string }) => Promise<void>;
+  incrementDownloadCount: () => Promise<void>;
   getAllUsers: () => Promise<AuthUser[]>;
   deleteUser: (id: string) => Promise<void>;
   toggleUserRole: (id: string) => Promise<void>;
+  updateUserStatus: (id: string, status: AuthUser['status']) => Promise<void>;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -32,7 +37,9 @@ function profileToAuthUser(profile: {
   name: string;
   email: string;
   role: string;
+  status?: string;
   resumes_built: number;
+  downloads_count?: number;
   created_at: string;
   last_login_at: string;
 }): AuthUser {
@@ -41,7 +48,9 @@ function profileToAuthUser(profile: {
     name: profile.name,
     email: profile.email,
     role: profile.role as 'user' | 'admin',
+    status: profile.status === 'rejected' ? 'rejected' : 'approved',
     resumesBuilt: profile.resumes_built,
+    downloadsCount: profile.downloads_count ?? 0,
     createdAt: profile.created_at,
     lastLoginAt: profile.last_login_at,
   };
@@ -89,7 +98,9 @@ function authUserFromSession(supabaseUser: { id: string; email?: string; user_me
     name: (supabaseUser.user_metadata?.name as string) || '',
     email: supabaseUser.email || '',
     role: 'user',
+    status: 'approved',
     resumesBuilt: 0,
+    downloadsCount: 0,
     createdAt: supabaseUser.created_at || new Date().toISOString(),
     lastLoginAt: new Date().toISOString(),
   };
@@ -100,6 +111,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const refreshUser = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      setUser(null);
+      return;
+    }
+
+    const profile = await fetchProfile(session.user.id) || authUserFromSession(session.user);
+    setUser(profile);
+  }, []);
+
   // Listen for Supabase auth changes and restore session
   useEffect(() => {
     let isMounted = true;
@@ -109,8 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user && isMounted) {
-          const profile = await fetchProfile(session.user.id) || authUserFromSession(session.user);
-          if (isMounted) setUser(profile);
+          await refreshUser();
         }
       } catch (err) {
         console.error('Failed to restore session:', err);
@@ -145,7 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [refreshUser]);
 
   const login = useCallback(async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
     try {
@@ -164,6 +185,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Try DB profile, fallback to auth user data
       const profile = await fetchProfile(data.user.id) || authUserFromSession(data.user);
+      if (profile.status === 'rejected') {
+        await supabase.auth.signOut();
+        setUser(null);
+        return { ok: false, error: 'This account has been rejected by an administrator.' };
+      }
       setUser(profile);
       return { ok: true };
     } catch (err) {
@@ -202,17 +228,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  const incrementResumeCount = useCallback(async () => {
+  const incrementResumeCount = useCallback(async (meta?: { jobCompany?: string; stackInfo?: string }) => {
     if (!user) return;
     const newCount = user.resumesBuilt + 1;
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ resumes_built: newCount })
-      .eq('id', user.id);
+    const [{ error }, generationResult] = await Promise.all([
+      supabase
+        .from('profiles')
+        .update({ resumes_built: newCount })
+        .eq('id', user.id),
+      supabase
+        .from('resume_generations')
+        .insert({
+          user_id: user.id,
+          job_company: meta?.jobCompany ?? '',
+          stack_info: meta?.stackInfo ?? '',
+        }),
+    ]);
 
     if (!error) {
       setUser((prev) => prev ? { ...prev, resumesBuilt: newCount } : null);
+    }
+
+    if (generationResult.error) {
+      console.warn('Failed to record resume generation:', generationResult.error);
+    }
+  }, [user]);
+
+  const incrementDownloadCount = useCallback(async () => {
+    if (!user) return;
+    const newCount = user.downloadsCount + 1;
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ downloads_count: newCount })
+      .eq('id', user.id);
+
+    if (!error) {
+      setUser((prev) => prev ? { ...prev, downloadsCount: newCount } : null);
     }
   }, [user]);
 
@@ -250,19 +303,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq('id', id);
   }, []);
 
+  const updateUserStatus = useCallback(async (id: string, status: AuthUser['status']) => {
+    await supabase
+      .from('profiles')
+      .update({ status })
+      .eq('id', id);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
         user,
-        isAdmin: user?.role === 'admin',
+        isAdmin: user?.role === 'admin' && user.status !== 'rejected',
         isLoading,
+        refreshUser,
         login,
         signup,
         logout,
         incrementResumeCount,
+        incrementDownloadCount,
         getAllUsers,
         deleteUser,
         toggleUserRole,
+        updateUserStatus,
       }}
     >
       {children}

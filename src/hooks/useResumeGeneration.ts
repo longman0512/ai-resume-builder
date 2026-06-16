@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { ResumeData } from '../types';
 import { generateTailoredResume, extractJobMetadata } from '../services/ai';
+import { normalizeResumeData } from '../lib/contactUtils';
+import { getGeminiApiKey } from '../lib/geminiApiKey';
 
 interface UseResumeGenerationReturn {
   isGenerating: boolean;
@@ -15,7 +17,7 @@ interface UseResumeGenerationReturn {
     resume: string,
     jobDesc: string,
     callbacks: {
-      onSuccess: (data: ResumeData) => void;
+      onSuccess: (data: ResumeData, meta: { jobCompany: string; stackInfo: string }) => void;
       notify: (opts: { title: string; body: string; type: 'success' | 'error' | 'info' }) => void;
     }
   ) => Promise<void>;
@@ -34,7 +36,9 @@ export function useResumeGeneration(): UseResumeGenerationReturn {
     if (window.aistudio?.hasSelectedApiKey) {
       const hasKey = await window.aistudio.hasSelectedApiKey();
       setHasApiKey(hasKey);
+      return;
     }
+    setHasApiKey(!!getGeminiApiKey());
   }, []);
 
   const handleOpenKeyDialog = useCallback(async () => {
@@ -49,7 +53,7 @@ export function useResumeGeneration(): UseResumeGenerationReturn {
       resume: string,
       jobDesc: string,
       callbacks: {
-        onSuccess: (data: ResumeData) => void;
+        onSuccess: (data: ResumeData, meta: { jobCompany: string; stackInfo: string }) => void;
         notify: (opts: { title: string; body: string; type: 'success' | 'error' | 'info' }) => void;
       }
     ) => {
@@ -65,14 +69,22 @@ export function useResumeGeneration(): UseResumeGenerationReturn {
 
       setIsGenerating(true);
       setError(null);
+      let extractedCompany = '';
+      let extractedStack = '';
       try {
         // Extract company name & stack FIRST so they're ready for download naming
         try {
           const meta = await extractJobMetadata(jobDesc);
           if (meta) {
             const m = JSON.parse(meta);
-            if (m.company) setJobCompany(m.company);
-            if (m.stack) setStackInfo(m.stack);
+            if (m.company) {
+              extractedCompany = m.company;
+              setJobCompany(m.company);
+            }
+            if (m.stack) {
+              extractedStack = m.stack;
+              setStackInfo(m.stack);
+            }
           }
         } catch {
           // metadata extraction is optional — don't block resume generation
@@ -80,8 +92,11 @@ export function useResumeGeneration(): UseResumeGenerationReturn {
 
         const result = await generateTailoredResume(resume, jobDesc);
         if (result) {
-          const parsed: ResumeData = JSON.parse(result);
-          callbacks.onSuccess(parsed);
+          const parsed: ResumeData = normalizeResumeData(JSON.parse(result));
+          callbacks.onSuccess(parsed, {
+            jobCompany: extractedCompany,
+            stackInfo: extractedStack,
+          });
           callbacks.notify({
             title: 'Resume Generated',
             body: 'Your tailored resume is ready!',
@@ -91,7 +106,7 @@ export function useResumeGeneration(): UseResumeGenerationReturn {
       } catch (err: any) {
         const message =
           err?.message?.includes('API Key') || err?.message?.includes('401')
-            ? 'API Key error — please select a valid API key.'
+            ? 'API Key error — add or update your key in Settings.'
             : err?.message || 'An error occurred while generating the resume.';
         setError(message);
         callbacks.notify({ title: 'Generation Failed', body: message, type: 'error' });

@@ -12,7 +12,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (user) return <Navigate to="/" replace />;
+  if (user && user.status !== 'rejected') return <Navigate to="/builder" replace />;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +28,7 @@ export default function LoginPage() {
         setError(result.error || 'Login failed.');
       } else {
         // Explicitly navigate after successful login
-        navigate('/', { replace: true });
+        navigate('/builder', { replace: true });
       }
     } catch {
       setError('An unexpected error occurred.');

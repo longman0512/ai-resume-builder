@@ -14,7 +14,7 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (user) return <Navigate to="/" replace />;
+  if (user && user.status !== 'rejected') return <Navigate to="/builder" replace />;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +37,7 @@ export default function SignupPage() {
       if (!result.ok) {
         setError(result.error || 'Signup failed.');
       } else {
-        navigate('/', { replace: true });
+        navigate('/builder', { replace: true });
       }
     } catch {
       setError('An unexpected error occurred.');

@@ -1,5 +1,6 @@
 import React from 'react';
 import { ResumeData } from '../types';
+import { isBlankContact } from '../lib/contactUtils';
 
 interface CoverLetterPreviewProps {
   personalInfo: ResumeData['personalInfo'];
@@ -14,15 +15,18 @@ export default function CoverLetterPreview({
   isEditing,
   onUpdate,
 }: CoverLetterPreviewProps) {
+  const emailPhone = [personalInfo.email, personalInfo.phone]
+    .filter((v) => !isBlankContact(v))
+    .join(' | ');
+
   return (
     <div className="flex flex-col h-full">
-      {/* Cover Letter Header */}
       <div className="mb-8">
         <p className="text-sm font-bold">{personalInfo.name}</p>
-        <p className="text-xs text-slate-600">{personalInfo.location}</p>
-        <p className="text-xs text-slate-600">
-          {personalInfo.email} | {personalInfo.phone}
-        </p>
+        {!isBlankContact(personalInfo.location) && (
+          <p className="text-xs text-slate-600">{personalInfo.location}</p>
+        )}
+        {emailPhone && <p className="text-xs text-slate-600">{emailPhone}</p>}
 
         <div className="mt-8">
           <p className="text-sm">
@@ -35,7 +39,6 @@ export default function CoverLetterPreview({
         </div>
       </div>
 
-      {/* Cover Letter Content */}
       <div className="flex-grow">
         {isEditing ? (
           <textarea

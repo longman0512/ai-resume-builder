@@ -1,5 +1,6 @@
 import React from 'react';
 import { ResumeData } from '../../types';
+import { isBlankContact } from '../../lib/contactUtils';
 
 interface ResumeHeaderProps {
   personalInfo: ResumeData['personalInfo'];
@@ -7,8 +8,12 @@ interface ResumeHeaderProps {
   onUpdateField: (field: keyof ResumeData['personalInfo'], value: string) => void;
 }
 
+const contactFields = ['email', 'phone', 'location', 'linkedin'] as const;
+
 export default function ResumeHeader({ personalInfo, isEditing, onUpdateField }: ResumeHeaderProps) {
-  const contactFields = ['email', 'phone', 'location', 'linkedin'] as const;
+  const visibleFields = isEditing
+    ? contactFields
+    : contactFields.filter((field) => !isBlankContact(personalInfo[field]));
 
   return (
     <div className="text-center mb-6">
@@ -32,22 +37,24 @@ export default function ResumeHeader({ personalInfo, isEditing, onUpdateField }:
         <p className="text-xl italic text-indigo-900 mb-3">{personalInfo.title}</p>
       )}
 
-      <div className="text-sm flex flex-wrap justify-center gap-2 text-slate-600">
-        {contactFields.map((field) => (
-          <React.Fragment key={field}>
-            {isEditing ? (
-              <input
-                className="border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none px-1"
-                value={personalInfo[field]}
-                onChange={(e) => onUpdateField(field, e.target.value)}
-              />
-            ) : (
-              <span>{personalInfo[field]}</span>
-            )}
-            {field !== 'linkedin' && <span className="text-slate-300">|</span>}
-          </React.Fragment>
-        ))}
-      </div>
+      {visibleFields.length > 0 && (
+        <div className="text-sm flex flex-wrap justify-center gap-2 text-slate-600">
+          {visibleFields.map((field, index) => (
+            <React.Fragment key={field}>
+              {isEditing ? (
+                <input
+                  className="border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none px-1"
+                  value={personalInfo[field]}
+                  onChange={(e) => onUpdateField(field, e.target.value)}
+                />
+              ) : (
+                <span>{personalInfo[field]}</span>
+              )}
+              {index < visibleFields.length - 1 && <span className="text-slate-300">|</span>}
+            </React.Fragment>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

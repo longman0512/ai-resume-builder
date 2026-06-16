@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { useAppContext } from '../App';
 
@@ -17,6 +18,7 @@ import EducationSection from '../components/resume/EducationSection';
 import SkillsSection from '../components/resume/SkillsSection';
 
 export default function EditorPage() {
+  const navigate = useNavigate();
   const {
     resume,
     setResume,
@@ -44,6 +46,8 @@ export default function EditorPage() {
     handleSaveResume,
     handleGenerateAnswers,
     handleCopyAnswer,
+    baseProfiles,
+    clearResumeSession,
   } = useAppContext();
 
   if (!resumeData) {
@@ -57,6 +61,7 @@ export default function EditorPage() {
         error={generation.error}
         onGenerate={handleGenerate}
         onOpenKeyDialog={generation.handleOpenKeyDialog}
+        baseProfiles={baseProfiles}
       />
     );
   }
@@ -170,9 +175,10 @@ export default function EditorPage() {
 
           <button
             onClick={() => {
-              setResumeData(null);
+              clearResumeSession();
               setResume('');
               setJobDesc('');
+              navigate('/builder');
             }}
             className="mt-8 text-slate-400 hover:text-indigo-600 transition-colors text-sm font-medium"
           >

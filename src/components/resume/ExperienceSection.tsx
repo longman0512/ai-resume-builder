@@ -44,8 +44,8 @@ export default function ExperienceSection({
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
-            <div className="flex justify-between items-baseline mb-1">
-              <div className="flex items-baseline gap-2 flex-1">
+            <div className="flex justify-between items-baseline gap-4 mb-1">
+              <div className="flex items-baseline gap-1 min-w-0 flex-1">
                 {isEditing ? (
                   <input
                     className="font-bold border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none"
@@ -53,12 +53,12 @@ export default function ExperienceSection({
                     onChange={(e) => onUpdate(idx, 'company', e.target.value)}
                   />
                 ) : (
-                  <span className="font-bold">{exp.company}</span>
+                  <span className="font-bold shrink-0">{exp.company}</span>
                 )}
-                <span className="text-slate-400 text-xs">,</span>
+                <span className="shrink-0">—</span>
                 {isEditing ? (
                   <input
-                    className="italic text-sm border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none flex-1"
+                    className="italic text-sm border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none flex-1 min-w-0"
                     value={exp.role}
                     onChange={(e) => onUpdate(idx, 'role', e.target.value)}
                   />
@@ -68,12 +68,12 @@ export default function ExperienceSection({
               </div>
               {isEditing ? (
                 <input
-                  className="text-sm text-right border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none"
+                  className="text-sm italic text-right shrink-0 border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none"
                   value={exp.period}
                   onChange={(e) => onUpdate(idx, 'period', e.target.value)}
                 />
               ) : (
-                <span className="text-sm">{exp.period}</span>
+                <span className="text-sm italic shrink-0 whitespace-nowrap">{exp.period}</span>
               )}
             </div>
             {(exp.bullets.length > 0 || isEditing) && (
@@ -104,7 +104,7 @@ export default function ExperienceSection({
                       ) : (
                         <>
                           <span className="mt-0.5 select-none shrink-0">•</span>
-                          <span>{bullet}</span>
+                          <span className="flex-1 text-justify">{bullet}</span>
                         </>
                       )}
                     </div>

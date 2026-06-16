@@ -22,7 +22,7 @@ export default function SkillsSection({
   return (
     <section>
       <div className="flex items-center justify-between border-b-2 border-slate-900 mb-3">
-        <h2 className="text-lg font-bold uppercase tracking-wide">Core Technologies</h2>
+        <h2 className="text-lg font-bold uppercase tracking-wide">Technical Skills</h2>
         {isEditing && (
           <button onClick={onAddCategory} className="p-1 text-indigo-600 hover:bg-indigo-50 rounded flex items-center gap-1 text-xs font-bold">
             <Plus className="w-3 h-3" /> ADD CATEGORY
