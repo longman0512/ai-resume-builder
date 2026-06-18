@@ -26,6 +26,23 @@ export interface ResumeData {
   coverLetter?: string;
 }
 
+export type ResumeTemplateKey = 'classic' | 'modern' | 'compact';
+
+export interface ResumeTemplate {
+  id: string;
+  name: string;
+  description: string;
+  templateKey: ResumeTemplateKey;
+  sourceType: 'code' | 'pdf' | 'docx';
+  sourceFilename: string;
+  previewUrl: string;
+  templateSchema: Record<string, unknown>;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface SavedResume {
   id: string;
   stackInfo: string;

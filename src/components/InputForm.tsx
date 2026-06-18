@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, Briefcase, Sparkles, Loader2, AlertCircle, ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -27,16 +27,6 @@ export default function InputForm({
   onOpenKeyDialog,
   baseProfiles = [],
 }: InputFormProps) {
-  const didAutoSelectRef = useRef(false);
-
-  useEffect(() => {
-    if (didAutoSelectRef.current) return;
-    if (baseProfiles.length !== 1) return;
-    if (resume.trim()) return;
-    setResume(baseProfiles[0]!.content);
-    didAutoSelectRef.current = true;
-  }, [baseProfiles, resume, setResume]);
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       {/* Input Section */}

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="594" viewBox="0 0 420 594" role="img" aria-label="Modern resume template preview">
+  <rect width="420" height="594" fill="#f1f5f9"/>
+  <rect x="42" y="28" width="336" height="538" rx="6" fill="#ffffff" stroke="#dbe3ef"/>
+  <text x="210" y="63" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" fill="#111827">Full Name</text>
+  <text x="210" y="85" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="600" fill="#1f2937">Senior Backend Engineer</text>
+  <text x="210" y="106" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="8.5" fill="#64748b">email@example.com | phone | city, country | linkedin</text>
+
+  <text x="70" y="139" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="800" letter-spacing="1" fill="#111827">PROFILE</text>
+  <line x1="70" y1="146" x2="350" y2="146" stroke="#111827" stroke-width="1.4"/>
+  <g fill="#cbd5e1">
+    <rect x="70" y="160" width="284" height="5" rx="2"/>
+    <rect x="70" y="172" width="272" height="5" rx="2"/>
+    <rect x="70" y="184" width="288" height="5" rx="2"/>
+    <rect x="70" y="196" width="236" height="5" rx="2"/>
+  </g>
+
+  <text x="70" y="232" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="800" letter-spacing="1" fill="#111827">PROFESSIONAL EXPERIENCE</text>
+  <line x1="70" y1="239" x2="350" y2="239" stroke="#111827" stroke-width="1.4"/>
+  <text x="70" y="259" font-family="Arial, Helvetica, sans-serif" font-size="9.5" font-weight="700" fill="#0f172a">Company - Senior Backend Engineer</text>
+  <text x="350" y="259" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="8.5" fill="#475569">2022 - 2026</text>
+  <g fill="#cbd5e1">
+    <circle cx="76" cy="278" r="2"/>
+    <rect x="84" y="275" width="260" height="5" rx="2"/>
+    <circle cx="76" cy="294" r="2"/>
+    <rect x="84" y="291" width="276" height="5" rx="2"/>
+    <circle cx="76" cy="310" r="2"/>
+    <rect x="84" y="307" width="235" height="5" rx="2"/>
+    <circle cx="76" cy="326" r="2"/>
+    <rect x="84" y="323" width="252" height="5" rx="2"/>
+  </g>
+
+  <text x="70" y="366" font-family="Arial, Helvetica, sans-serif" font-size="9.5" font-weight="700" fill="#0f172a">Company - Senior Backend Engineer</text>
+  <text x="350" y="366" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="8.5" fill="#475569">2019 - 2022</text>
+  <g fill="#cbd5e1">
+    <circle cx="76" cy="385" r="2"/>
+    <rect x="84" y="382" width="268" height="5" rx="2"/>
+    <circle cx="76" cy="401" r="2"/>
+    <rect x="84" y="398" width="245" height="5" rx="2"/>
+    <circle cx="76" cy="417" r="2"/>
+    <rect x="84" y="414" width="278" height="5" rx="2"/>
+  </g>
+
+  <text x="70" y="459" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="800" letter-spacing="1" fill="#111827">EDUCATION</text>
+  <line x1="70" y1="466" x2="350" y2="466" stroke="#111827" stroke-width="1.4"/>
+  <text x="70" y="486" font-family="Arial, Helvetica, sans-serif" font-size="9.5" font-weight="700" fill="#0f172a">Bachelor's Degree - University</text>
+  <text x="350" y="486" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="8.5" fill="#475569">2010 - 2015</text>
+  <rect x="70" y="499" width="150" height="5" rx="2" fill="#cbd5e1"/>
+
+  <text x="70" y="532" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="800" letter-spacing="1" fill="#111827">CORE TECHNOLOGIES</text>
+  <line x1="70" y1="539" x2="350" y2="539" stroke="#111827" stroke-width="1.4"/>
+  <g fill="#cbd5e1">
+    <rect x="70" y="553" width="276" height="5" rx="2"/>
+  </g>
+</svg>

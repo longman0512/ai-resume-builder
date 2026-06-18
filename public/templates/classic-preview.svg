@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="594" viewBox="0 0 420 594" role="img" aria-label="Classic resume template preview">
+  <rect width="420" height="594" fill="#f8fafc"/>
+  <rect x="42" y="28" width="336" height="538" rx="4" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="210" y="64" text-anchor="middle" font-family="Times New Roman, serif" font-size="18" font-weight="700" fill="#0f172a">Full Name</text>
+  <text x="210" y="84" text-anchor="middle" font-family="Times New Roman, serif" font-size="10" fill="#334155">Target Job Title</text>
+  <text x="210" y="102" text-anchor="middle" font-family="Times New Roman, serif" font-size="8" fill="#64748b">email@example.com | phone | linkedin | location</text>
+
+  <g fill="#cbd5e1">
+    <rect x="70" y="126" width="280" height="5" rx="2"/>
+    <rect x="70" y="138" width="270" height="5" rx="2"/>
+    <rect x="70" y="150" width="288" height="5" rx="2"/>
+    <rect x="70" y="162" width="220" height="5" rx="2"/>
+  </g>
+
+  <text x="70" y="205" font-family="Times New Roman, serif" font-size="12" font-weight="700" fill="#111827">Core Skills</text>
+  <line x1="70" y1="212" x2="350" y2="212" stroke="#111827" stroke-width="1.5"/>
+  <g fill="#cbd5e1">
+    <rect x="70" y="226" width="260" height="5" rx="2"/>
+    <rect x="70" y="238" width="286" height="5" rx="2"/>
+    <rect x="70" y="250" width="240" height="5" rx="2"/>
+    <rect x="70" y="262" width="272" height="5" rx="2"/>
+  </g>
+
+  <text x="70" y="304" font-family="Times New Roman, serif" font-size="12" font-weight="700" fill="#111827">Work Experience</text>
+  <line x1="70" y1="311" x2="350" y2="311" stroke="#111827" stroke-width="1.5"/>
+  <text x="70" y="331" font-family="Times New Roman, serif" font-size="10" font-weight="700" fill="#0f172a">Company Name</text>
+  <text x="165" y="331" font-family="Times New Roman, serif" font-size="10" fill="#334155">- Role Title</text>
+  <text x="350" y="331" text-anchor="end" font-family="Times New Roman, serif" font-size="9" fill="#475569">2023 - Present</text>
+  <g fill="#cbd5e1">
+    <circle cx="76" cy="350" r="2"/>
+    <rect x="84" y="347" width="250" height="5" rx="2"/>
+    <circle cx="76" cy="366" r="2"/>
+    <rect x="84" y="363" width="265" height="5" rx="2"/>
+    <circle cx="76" cy="382" r="2"/>
+    <rect x="84" y="379" width="230" height="5" rx="2"/>
+  </g>
+
+  <text x="70" y="424" font-family="Times New Roman, serif" font-size="10" font-weight="700" fill="#0f172a">Earlier Company</text>
+  <text x="165" y="424" font-family="Times New Roman, serif" font-size="10" fill="#334155">- Role Title</text>
+  <text x="350" y="424" text-anchor="end" font-family="Times New Roman, serif" font-size="9" fill="#475569">2021 - 2023</text>
+  <g fill="#cbd5e1">
+    <circle cx="76" cy="443" r="2"/>
+    <rect x="84" y="440" width="246" height="5" rx="2"/>
+    <circle cx="76" cy="459" r="2"/>
+    <rect x="84" y="456" width="272" height="5" rx="2"/>
+  </g>
+
+  <text x="70" y="505" font-family="Times New Roman, serif" font-size="12" font-weight="700" fill="#111827">Education</text>
+  <line x1="70" y1="512" x2="350" y2="512" stroke="#111827" stroke-width="1.5"/>
+  <g fill="#cbd5e1">
+    <rect x="70" y="528" width="180" height="5" rx="2"/>
+    <rect x="70" y="540" width="135" height="5" rx="2"/>
+  </g>
+</svg>

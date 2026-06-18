@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
 import { Plus, Pencil, Trash2, Check, X, FileText, Loader2 } from 'lucide-react';
-import { useBaseProfiles } from '../hooks/useBaseProfiles';
 import type { BaseProfile } from '../hooks/useBaseProfiles';
+import { useAppContext } from '../App';
 import { cn } from '../lib/utils';
 
 export default function ProfilePage() {
-  const { baseProfiles, isLoading, create, update, remove } = useBaseProfiles();
+  const {
+    baseProfiles,
+    baseProfilesLoading: isLoading,
+    createBaseProfile: create,
+    updateBaseProfile: update,
+    removeBaseProfile: remove,
+  } = useAppContext();
 
   // ── "new" form state ────────────────────────────────────────────
   const [showNew, setShowNew] = useState(false);

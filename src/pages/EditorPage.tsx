@@ -9,6 +9,7 @@ import ContextSidebar from '../components/ContextSidebar';
 import CoverLetterPreview from '../components/CoverLetterPreview';
 import QAPanel from '../components/QAPanel';
 import SaveModal from '../components/SaveModal';
+import ResumeTemplateSelector from '../components/ResumeTemplateSelector';
 
 // Resume sub-components
 import ResumeHeader from '../components/resume/ResumeHeader';
@@ -46,28 +47,92 @@ export default function EditorPage() {
     handleSaveResume,
     handleGenerateAnswers,
     handleCopyAnswer,
+    activeTemplates,
+    selectedTemplateKey,
+    setSelectedTemplateKey,
     baseProfiles,
     clearResumeSession,
   } = useAppContext();
 
   if (!resumeData) {
     return (
-      <InputForm
-        resume={resume}
-        setResume={setResume}
-        jobDesc={jobDesc}
-        setJobDesc={setJobDesc}
-        isGenerating={generation.isGenerating}
-        error={generation.error}
-        onGenerate={handleGenerate}
-        onOpenKeyDialog={generation.handleOpenKeyDialog}
-        baseProfiles={baseProfiles}
-      />
+      <div className="space-y-6">
+        <ResumeTemplateSelector
+          templates={activeTemplates}
+          selectedTemplateKey={selectedTemplateKey}
+          onChange={setSelectedTemplateKey}
+        />
+        <InputForm
+          resume={resume}
+          setResume={setResume}
+          jobDesc={jobDesc}
+          setJobDesc={setJobDesc}
+          isGenerating={generation.isGenerating}
+          error={generation.error}
+          onGenerate={handleGenerate}
+          onOpenKeyDialog={generation.handleOpenKeyDialog}
+          baseProfiles={baseProfiles}
+        />
+      </div>
     );
   }
 
+  const templateClassName = cn(
+    'bg-white w-[210mm] min-h-[297mm] px-[10mm] py-[20mm] font-serif text-[#1a1a1a] leading-relaxed overflow-visible',
+    selectedTemplateKey === 'modern' &&
+      'font-sans text-slate-800 [&_h1]:text-indigo-950 [&_h2]:text-indigo-700 [&_h2]:border-indigo-500 [&_p]:leading-6',
+    selectedTemplateKey === 'compact' &&
+      'py-[14mm] text-[13px] leading-snug [&_section]:mb-4 [&_h1]:text-3xl [&_h2]:text-base [&_h2]:mb-2 [&_textarea]:leading-snug',
+    isEditing && 'ring-4 ring-indigo-100'
+  );
+
+  const experienceSection = (
+    <ExperienceSection
+      experience={resumeData.experience}
+      isEditing={isEditing}
+      onUpdate={editor.updateExperience}
+      onAdd={editor.addExperience}
+      onRemove={editor.removeExperience}
+      onAddBullet={editor.addBullet}
+      onRemoveBullet={editor.removeBullet}
+    />
+  );
+
+  const educationSection = (
+    <EducationSection
+      education={resumeData.education}
+      isEditing={isEditing}
+      onUpdate={(idx, field, value) => {
+        const newEdu = [...resumeData.education];
+        (newEdu[idx] as any)[field] = value;
+        setResumeData({ ...resumeData, education: newEdu });
+      }}
+      onAdd={editor.addEducation}
+      onRemove={editor.removeEducation}
+    />
+  );
+
+  const skillsSection = (
+    <SkillsSection
+      skills={resumeData.skills}
+      isEditing={isEditing}
+      onUpdateSkill={editor.updateSkill}
+      onUpdateCategory={editor.updateSkillCategory}
+      onRemoveCategory={editor.removeSkillCategory}
+      onAddCategory={editor.addSkillCategory}
+    />
+  );
+
   return (
     <>
+      <div className="mb-6 max-w-3xl mx-auto">
+        <ResumeTemplateSelector
+          templates={activeTemplates}
+          selectedTemplateKey={selectedTemplateKey}
+          onChange={setSelectedTemplateKey}
+          compact
+        />
+      </div>
       <div className="flex gap-8 items-start justify-center">
         {/* Context Sidebar */}
         {showInputs && <ContextSidebar resume={resume} jobDesc={jobDesc} />}
@@ -95,10 +160,7 @@ export default function EditorPage() {
             <div className="shadow-2xl rounded-sm overflow-hidden bg-white">
               <div
                 ref={resumeRef}
-                className={cn(
-                  'bg-white w-[210mm] min-h-[297mm] px-[10mm] py-[20mm] font-serif text-[#1a1a1a] leading-relaxed overflow-visible',
-                  isEditing && 'ring-4 ring-indigo-100'
-                )}
+                className={templateClassName}
               >
                 <div ref={contentRef}>
                   {activeTab === 'resume' ? (
@@ -125,34 +187,19 @@ export default function EditorPage() {
 
                   {activeTab === 'resume' && (
                     <>
-                      <ExperienceSection
-                        experience={resumeData.experience}
-                        isEditing={isEditing}
-                        onUpdate={editor.updateExperience}
-                        onAdd={editor.addExperience}
-                        onRemove={editor.removeExperience}
-                        onAddBullet={editor.addBullet}
-                        onRemoveBullet={editor.removeBullet}
-                      />
-                      <EducationSection
-                        education={resumeData.education}
-                        isEditing={isEditing}
-                        onUpdate={(idx, field, value) => {
-                          const newEdu = [...resumeData.education];
-                          (newEdu[idx] as any)[field] = value;
-                          setResumeData({ ...resumeData, education: newEdu });
-                        }}
-                        onAdd={editor.addEducation}
-                        onRemove={editor.removeEducation}
-                      />
-                      <SkillsSection
-                        skills={resumeData.skills}
-                        isEditing={isEditing}
-                        onUpdateSkill={editor.updateSkill}
-                        onUpdateCategory={editor.updateSkillCategory}
-                        onRemoveCategory={editor.removeSkillCategory}
-                        onAddCategory={editor.addSkillCategory}
-                      />
+                      {selectedTemplateKey === 'classic' ? (
+                        <>
+                          {skillsSection}
+                          {experienceSection}
+                          {educationSection}
+                        </>
+                      ) : (
+                        <>
+                          {experienceSection}
+                          {educationSection}
+                          {skillsSection}
+                        </>
+                      )}
                     </>
                   )}
                 </div>

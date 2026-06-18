@@ -9,22 +9,25 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ adminOnly = false }: ProtectedRouteProps) {
   const { user, isAdmin, isLoading, logout, refreshUser } = useAuth();
-  const [hasRefreshedProfile, setHasRefreshedProfile] = useState(false);
+  const [hasCheckedAdminProfile, setHasCheckedAdminProfile] = useState(false);
 
   useEffect(() => {
-    if (!user || !adminOnly || isAdmin || hasRefreshedProfile) return;
+    if (!user || !adminOnly || isAdmin || hasCheckedAdminProfile) return;
 
     let cancelled = false;
-    refreshUser().finally(() => {
-      if (!cancelled) setHasRefreshedProfile(true);
+    Promise.race([
+      refreshUser(),
+      new Promise((resolve) => setTimeout(resolve, 7000)),
+    ]).finally(() => {
+      if (!cancelled) setHasCheckedAdminProfile(true);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [adminOnly, hasRefreshedProfile, isAdmin, refreshUser, user]);
+  }, [adminOnly, hasCheckedAdminProfile, isAdmin, refreshUser, user]);
 
-  if (isLoading || (adminOnly && user && !isAdmin && !hasRefreshedProfile)) {
+  if (isLoading || (adminOnly && user && !isAdmin && !hasCheckedAdminProfile)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />

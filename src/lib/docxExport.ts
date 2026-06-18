@@ -10,12 +10,11 @@ import {
   TabStopType,
   TextRun,
 } from 'docx';
-import type { ResumeData } from '../types';
+import type { ResumeData, ResumeTemplateKey } from '../types';
 import { RESUME_CONTENT_WIDTH_MM, RESUME_PAGE, SKILL_CATEGORIES } from '../constants';
 import { formatContactLine, isBlankContact } from './contactUtils';
 import { sortExperienceNewestFirst } from './resumeUtils';
 
-const FONT = 'Times New Roman';
 const BODY = 22; // 11pt
 const NAME = 48; // 24pt
 const TITLE = 28; // 14pt
@@ -23,7 +22,18 @@ const HEADING = 24; // 12pt
 /** Right-aligned tab at end of content area (matches web px-[10mm] horizontal padding). */
 const RIGHT_TAB_POSITION = convertMillimetersToTwip(RESUME_CONTENT_WIDTH_MM);
 
-function a4SectionProperties() {
+function getTemplateStyle(templateKey: ResumeTemplateKey = 'classic') {
+  if (templateKey === 'modern') {
+    return { font: 'Aptos', headingColor: '4F46E5', bodySize: BODY, compact: false };
+  }
+  if (templateKey === 'compact') {
+    return { font: 'Times New Roman', headingColor: '000000', bodySize: 20, compact: true };
+  }
+  return { font: 'Times New Roman', headingColor: '000000', bodySize: BODY, compact: false };
+}
+
+function a4SectionProperties(templateKey: ResumeTemplateKey = 'classic') {
+  const compact = templateKey === 'compact';
   return {
     page: {
       size: {
@@ -32,9 +42,9 @@ function a4SectionProperties() {
         height: convertMillimetersToTwip(RESUME_PAGE.HEIGHT_MM),
       },
       margin: {
-        top: convertMillimetersToTwip(RESUME_PAGE.MARGIN_TOP_MM),
+        top: convertMillimetersToTwip(compact ? 14 : RESUME_PAGE.MARGIN_TOP_MM),
         right: convertMillimetersToTwip(RESUME_PAGE.MARGIN_RIGHT_MM),
-        bottom: convertMillimetersToTwip(RESUME_PAGE.MARGIN_BOTTOM_MM),
+        bottom: convertMillimetersToTwip(compact ? 14 : RESUME_PAGE.MARGIN_BOTTOM_MM),
         left: convertMillimetersToTwip(RESUME_PAGE.MARGIN_LEFT_MM),
       },
     },
@@ -48,46 +58,74 @@ type RunOpts = {
   color?: string;
 };
 
-function run(text: string, opts: RunOpts = {}): TextRun {
-  return new TextRun({ text, font: FONT, size: BODY, ...opts });
+function run(text: string, opts: RunOpts = {}, templateKey: ResumeTemplateKey = 'classic'): TextRun {
+  const style = getTemplateStyle(templateKey);
+  return new TextRun({ text, font: style.font, size: style.bodySize, ...opts });
 }
 
-function experienceHeaderParagraph(company: string, role: string, period: string): Paragraph {
+function experienceHeaderParagraph(company: string, role: string, period: string, templateKey: ResumeTemplateKey): Paragraph {
+  const style = getTemplateStyle(templateKey);
   const children: (TextRun | Tab)[] = [
-    run(company, { bold: true }),
-    run(` — ${role}`),
+    run(company, { bold: true }, templateKey),
+    run(` - ${role}`, {}, templateKey),
   ];
   if (period.trim()) {
     children.push(new TextRun({ children: [new Tab()] }));
-    children.push(run(period, { italics: true }));
+    children.push(run(period, { italics: true }, templateKey));
   }
   return new Paragraph({
-    spacing: { before: 160, after: 80 },
+    spacing: { before: style.compact ? 100 : 160, after: style.compact ? 50 : 80 },
     tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB_POSITION }],
     children,
   });
 }
 
-function sectionHeading(text: string): Paragraph {
+function sectionHeading(text: string, templateKey: ResumeTemplateKey): Paragraph {
+  const style = getTemplateStyle(templateKey);
   return new Paragraph({
-    spacing: { before: 240, after: 120 },
+    spacing: { before: style.compact ? 160 : 240, after: style.compact ? 80 : 120 },
     border: {
-      bottom: { color: '000000', space: 1, style: BorderStyle.SINGLE, size: 6 },
+      bottom: { color: style.headingColor, space: 1, style: BorderStyle.SINGLE, size: 6 },
     },
-    children: [run(text.toUpperCase(), { bold: true, size: HEADING })],
+    children: [run(text.toUpperCase(), { bold: true, size: style.compact ? 22 : HEADING, color: style.headingColor }, templateKey)],
   });
 }
 
-export function buildResumeDocument(data: ResumeData): Document {
+export function buildResumeDocument(data: ResumeData, templateKey: ResumeTemplateKey = 'classic'): Document {
+  const style = getTemplateStyle(templateKey);
   const { personalInfo, profile, education, skills } = data;
   const experience = sortExperienceNewestFirst(data.experience);
   const children: Paragraph[] = [];
+  const skillEntries = SKILL_CATEGORIES.map((category) => ({
+    category,
+    value: skills[category]?.trim() ?? '',
+  })).filter(({ value }) => value);
+  const appendSkillsSection = () => {
+    if (skillEntries.length === 0) return;
+    const skillsHeading = templateKey === 'classic'
+      ? 'Core Skills'
+      : templateKey === 'modern'
+        ? 'Core Technologies'
+        : 'Technical Skills';
+    children.push(sectionHeading(skillsHeading, templateKey));
+    for (const { category, value } of skillEntries) {
+      children.push(
+        new Paragraph({
+          spacing: { before: style.compact ? 50 : 80, after: style.compact ? 50 : 80 },
+          children: [
+            run(`${category}: `, { bold: true }, templateKey),
+            run(value, {}, templateKey),
+          ],
+        })
+      );
+    }
+  };
 
   children.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 80 },
-      children: [run(personalInfo.name, { bold: true, size: NAME })],
+      spacing: { after: style.compact ? 40 : 80 },
+      children: [run(personalInfo.name, { bold: true, size: style.compact ? 40 : NAME, color: style.headingColor }, templateKey)],
     })
   );
 
@@ -95,8 +133,8 @@ export function buildResumeDocument(data: ResumeData): Document {
     children.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { after: 120 },
-        children: [run(personalInfo.title, { italics: true, size: TITLE })],
+        spacing: { after: style.compact ? 80 : 120 },
+        children: [run(personalInfo.title, { italics: true, size: style.compact ? 24 : TITLE }, templateKey)],
       })
     );
   }
@@ -106,35 +144,39 @@ export function buildResumeDocument(data: ResumeData): Document {
     children.push(
       new Paragraph({
         alignment: AlignmentType.CENTER,
-        spacing: { after: 280 },
-        children: [run(contactLine)],
+        spacing: { after: style.compact ? 180 : 280 },
+        children: [run(contactLine, {}, templateKey)],
       })
     );
   }
 
   if (profile?.trim()) {
-    children.push(sectionHeading('Profile'));
+    children.push(sectionHeading('Profile', templateKey));
     children.push(
       new Paragraph({
         alignment: AlignmentType.JUSTIFIED,
-        spacing: { after: 200 },
-        children: [run(profile)],
+        spacing: { after: style.compact ? 120 : 200 },
+        children: [run(profile, {}, templateKey)],
       })
     );
   }
 
+  if (templateKey === 'classic') {
+    appendSkillsSection();
+  }
+
   if (experience.length > 0) {
-    children.push(sectionHeading('Professional Experience'));
+    children.push(sectionHeading('Professional Experience', templateKey));
     for (const exp of experience) {
-      children.push(experienceHeaderParagraph(exp.company, exp.role, exp.period ?? ''));
+      children.push(experienceHeaderParagraph(exp.company, exp.role, exp.period ?? '', templateKey));
       for (const bullet of exp.bullets) {
         if (!bullet?.trim()) continue;
         children.push(
           new Paragraph({
             bullet: { level: 0 },
             alignment: AlignmentType.JUSTIFIED,
-            spacing: { after: 60 },
-            children: [run(bullet)],
+            spacing: { after: style.compact ? 35 : 60 },
+            children: [run(bullet, {}, templateKey)],
           })
         );
       }
@@ -142,14 +184,14 @@ export function buildResumeDocument(data: ResumeData): Document {
   }
 
   if (education.length > 0) {
-    children.push(sectionHeading('Education'));
+    children.push(sectionHeading('Education', templateKey));
     for (const edu of education) {
       children.push(
         new Paragraph({
-          spacing: { before: 120, after: 40 },
+          spacing: { before: style.compact ? 80 : 120, after: 40 },
           children: [
-            run(edu.degree, { bold: true }),
-            run(` — ${edu.school}`),
+            run(edu.degree, { bold: true }, templateKey),
+            run(` - ${edu.school}`, {}, templateKey),
           ],
         })
       );
@@ -157,35 +199,20 @@ export function buildResumeDocument(data: ResumeData): Document {
       if (details) {
         children.push(
           new Paragraph({
-            spacing: { after: 120 },
-            children: [run(details, { italics: true })],
+            spacing: { after: style.compact ? 80 : 120 },
+            children: [run(details, { italics: true }, templateKey)],
           })
         );
       }
     }
   }
 
-  const skillEntries = SKILL_CATEGORIES.map((category) => ({
-    category,
-    value: skills[category]?.trim() ?? '',
-  })).filter(({ value }) => value);
-  if (skillEntries.length > 0) {
-    children.push(sectionHeading('Technical Skills'));
-    for (const { category, value } of skillEntries) {
-      children.push(
-        new Paragraph({
-          spacing: { before: 80, after: 80 },
-          children: [
-            run(`${category}: `, { bold: true }),
-            run(value),
-          ],
-        })
-      );
-    }
+  if (templateKey !== 'classic') {
+    appendSkillsSection();
   }
 
   return new Document({
-    sections: [{ properties: a4SectionProperties(), children }],
+    sections: [{ properties: a4SectionProperties(templateKey), children }],
   });
 }
 
@@ -239,8 +266,8 @@ export function buildCoverLetterDocument(data: ResumeData): Document {
   });
 }
 
-export async function resumeToDocxBuffer(data: ResumeData): Promise<ArrayBuffer> {
-  const blob = await Packer.toBlob(buildResumeDocument(data));
+export async function resumeToDocxBuffer(data: ResumeData, templateKey: ResumeTemplateKey = 'classic'): Promise<ArrayBuffer> {
+  const blob = await Packer.toBlob(buildResumeDocument(data, templateKey));
   return blob.arrayBuffer();
 }
 

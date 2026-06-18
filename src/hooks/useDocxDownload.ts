@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import JSZip from 'jszip';
-import type { ResumeData } from '../types';
+import type { ResumeData, ResumeTemplateKey } from '../types';
 import { coverLetterToDocxBuffer, resumeToDocxBuffer } from '../lib/docxExport';
 import { buildResumeDownloadBaseName, sanitizePersonNameForFile } from '../lib/resumeUtils';
 
@@ -10,6 +10,7 @@ interface UseDocxDownloadReturn {
   contentRef: React.RefObject<HTMLDivElement | null>;
   downloadDocx: (params: {
     resumeData: ResumeData;
+    templateKey: ResumeTemplateKey;
     jobCompany: string;
     stackInfo: string;
     notify: (opts: { title: string; body: string; type: 'success' | 'error' | 'info' }) => void;
@@ -59,16 +60,17 @@ export function useDocxDownload(): UseDocxDownloadReturn {
   const downloadDocx = useCallback(
     async (params: {
       resumeData: ResumeData;
+      templateKey: ResumeTemplateKey;
       jobCompany: string;
       stackInfo: string;
       notify: (opts: { title: string; body: string; type: 'success' | 'error' | 'info' }) => void;
     }) => {
-      const { resumeData, jobCompany, stackInfo, notify } = params;
+      const { resumeData, templateKey, jobCompany, stackInfo, notify } = params;
       setIsDownloading(true);
 
       try {
         const [resumeBuffer, coverBuffer] = await Promise.all([
-          resumeToDocxBuffer(resumeData),
+          resumeToDocxBuffer(resumeData, templateKey),
           coverLetterToDocxBuffer(resumeData),
         ]);
 

@@ -44,7 +44,11 @@ export function useBaseProfiles() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (!error) setBaseProfiles((data || []).map((r: BaseProfileRow) => rowToBaseProfile(r)));
+      if (error) {
+        console.error('Failed to load base profiles:', error);
+      } else {
+        setBaseProfiles((data || []).map((r: BaseProfileRow) => rowToBaseProfile(r)));
+      }
     } finally {
       setIsLoading(false);
     }

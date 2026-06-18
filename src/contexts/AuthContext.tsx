@@ -19,7 +19,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isAdmin: boolean;
   isLoading: boolean;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<AuthUser | null>;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   signup: (name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -91,6 +91,15 @@ async function fetchProfile(userId: string): Promise<AuthUser | null> {
   return null;
 }
 
+async function getSessionWithTimeout() {
+  return await Promise.race([
+    supabase.auth.getSession(),
+    new Promise<Awaited<ReturnType<typeof supabase.auth.getSession>>>((resolve) =>
+      setTimeout(() => resolve({ data: { session: null }, error: null }), 4000)
+    ),
+  ]);
+}
+
 // Build an AuthUser from the Supabase auth user object (fallback when profiles table is missing)
 function authUserFromSession(supabaseUser: { id: string; email?: string; user_metadata?: Record<string, unknown>; created_at?: string }): AuthUser {
   return {
@@ -112,14 +121,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshUser = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await getSessionWithTimeout();
     if (!session?.user) {
       setUser(null);
-      return;
+      return null;
     }
 
     const profile = await fetchProfile(session.user.id) || authUserFromSession(session.user);
     setUser(profile);
+    return profile;
   }, []);
 
   // Listen for Supabase auth changes and restore session
@@ -129,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Get initial session
     const initSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await getSessionWithTimeout();
         if (session?.user && isMounted) {
           await refreshUser();
         }

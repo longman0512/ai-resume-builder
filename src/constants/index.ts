@@ -1,7 +1,10 @@
 export const STORAGE_KEYS = {
   BASE_RESUME: 'ai_base_resume',
   GEMINI_API_KEY: 'gemini_api_key',
+  RESUME_TEMPLATE: 'ai_resume_template',
 } as const;
+
+export const RESUME_TEMPLATE_KEYS = ['classic', 'modern', 'compact'] as const;
 
 /** A4 resume layout — shared by web preview and DOCX export */
 export const RESUME_PAGE = {

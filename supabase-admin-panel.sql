@@ -130,3 +130,136 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- 7. Add admin-managed resume templates.
+CREATE TABLE IF NOT EXISTS public.resume_templates (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         TEXT NOT NULL,
+  description  TEXT NOT NULL DEFAULT '',
+  template_key TEXT NOT NULL UNIQUE CHECK (template_key IN ('classic', 'modern', 'compact')),
+  source_type  TEXT NOT NULL DEFAULT 'code' CHECK (source_type IN ('code', 'pdf', 'docx')),
+  source_filename TEXT NOT NULL DEFAULT '',
+  preview_url TEXT NOT NULL DEFAULT '',
+  template_schema JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_active    BOOLEAN NOT NULL DEFAULT true,
+  sort_order   INTEGER NOT NULL DEFAULT 10,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.resume_templates
+  ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'code';
+
+ALTER TABLE public.resume_templates
+  ADD COLUMN IF NOT EXISTS source_filename TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE public.resume_templates
+  ADD COLUMN IF NOT EXISTS preview_url TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE public.resume_templates
+  ADD COLUMN IF NOT EXISTS template_schema JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE INDEX IF NOT EXISTS idx_resume_templates_active_sort
+  ON public.resume_templates(is_active, sort_order);
+
+ALTER TABLE public.resume_templates ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can read active resume templates" ON public.resume_templates;
+CREATE POLICY "Users can read active resume templates"
+  ON public.resume_templates FOR SELECT
+  USING (is_active = true);
+
+DROP POLICY IF EXISTS "Admins can read all resume templates" ON public.resume_templates;
+CREATE POLICY "Admins can read all resume templates"
+  ON public.resume_templates FOR SELECT
+  USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Admins can insert resume templates" ON public.resume_templates;
+CREATE POLICY "Admins can insert resume templates"
+  ON public.resume_templates FOR INSERT
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Admins can update resume templates" ON public.resume_templates;
+CREATE POLICY "Admins can update resume templates"
+  ON public.resume_templates FOR UPDATE
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Admins can delete resume templates" ON public.resume_templates;
+CREATE POLICY "Admins can delete resume templates"
+  ON public.resume_templates FOR DELETE
+  USING (public.is_admin());
+
+INSERT INTO public.resume_templates (name, description, template_key, source_type, source_filename, preview_url, template_schema, is_active, sort_order)
+VALUES
+  (
+    'classic',
+    'Imported from local PDF reference. Single-column resume with compact skills before work experience.',
+    'classic',
+    'pdf',
+    'Eric Nicholas Carr (1).pdf',
+    '/templates/classic-preview.svg',
+    '{
+      "importSource": "local_pdf",
+      "sourceFilename": "Eric Nicholas Carr (1).pdf",
+      "layout": {
+        "pages": 2,
+        "columns": "single",
+        "header": "name_title_contact",
+        "profileHeading": "hidden",
+        "sectionHeadingStyle": "plain_bold",
+        "bulletStyle": "filled_circle"
+      },
+      "sectionOrder": ["header", "profile", "skills", "experience", "education"],
+      "sectionLabels": {
+        "skills": "Core Skills",
+        "experience": "Work Experience",
+        "education": "Education"
+      },
+      "placeholders": ["name", "title", "contact", "profile", "skills", "experience", "education"]
+    }'::jsonb,
+    true,
+    10
+  ),
+  (
+    'Modern',
+    'Imported from local backend resume PDF. Modern single-column layout with profile, experience, education, and core technologies.',
+    'modern',
+    'pdf',
+    'Marko_Zeljko_Resume.pdf',
+    '/templates/modern-preview.svg',
+    '{
+      "importSource": "local_pdf",
+      "sourceFilename": "Marko_Zeljko_Resume.pdf",
+      "layout": {
+        "pages": 2,
+        "columns": "single",
+        "header": "centered_name_title_contact",
+        "profileHeading": "visible",
+        "sectionHeadingStyle": "uppercase_underline",
+        "bulletStyle": "filled_circle"
+      },
+      "sectionOrder": ["header", "profile", "experience", "education", "skills"],
+      "sectionLabels": {
+        "profile": "PROFILE",
+        "experience": "Professional Experience",
+        "education": "Education",
+        "skills": "CORE TECHNOLOGIES"
+      },
+      "placeholders": ["name", "title", "contact", "profile", "experience", "education", "skills"]
+    }'::jsonb,
+    true,
+    20
+  ),
+  ('Compact', 'Dense layout tuned for longer resumes.', 'compact', 'code', '', '', '{}'::jsonb, true, 30)
+ON CONFLICT (template_key) DO UPDATE
+SET
+  name = EXCLUDED.name,
+  description = EXCLUDED.description,
+  source_type = EXCLUDED.source_type,
+  source_filename = EXCLUDED.source_filename,
+  preview_url = EXCLUDED.preview_url,
+  template_schema = EXCLUDED.template_schema,
+  is_active = EXCLUDED.is_active,
+  sort_order = EXCLUDED.sort_order,
+  updated_at = now();
+

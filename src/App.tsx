@@ -18,7 +18,9 @@ import { useDocxDownload } from './hooks/useDocxDownload';
 import { useApplicationQA } from './hooks/useApplicationQA';
 import { useResumeDownloads } from './hooks/useResumeDownloads';
 import { useBaseProfiles } from './hooks/useBaseProfiles';
+import { useResumeTemplates } from './hooks/useResumeTemplates';
 import type { BaseProfile } from './hooks/useBaseProfiles';
+import type { ResumeTemplate, ResumeTemplateKey } from './types';
 import { extractJobMetadata } from './services/ai';
 
 // Auth
@@ -64,7 +66,22 @@ interface AppContextType {
   handleSaveResume: () => void;
   handleGenerateAnswers: () => void;
   handleCopyAnswer: (answer: string, idx: number) => void;
+  templates: ResumeTemplate[];
+  activeTemplates: ResumeTemplate[];
+  templatesLoading: boolean;
+  templatesError: string | null;
+  selectedTemplateKey: ResumeTemplateKey;
+  setSelectedTemplateKey: (key: ResumeTemplateKey) => void;
+  refreshTemplates: ReturnType<typeof useResumeTemplates>['refresh'];
+  createTemplate: ReturnType<typeof useResumeTemplates>['create'];
+  updateTemplate: ReturnType<typeof useResumeTemplates>['update'];
+  removeTemplate: ReturnType<typeof useResumeTemplates>['remove'];
   baseProfiles: BaseProfile[];
+  baseProfilesLoading: boolean;
+  refreshBaseProfiles: ReturnType<typeof useBaseProfiles>['refresh'];
+  createBaseProfile: ReturnType<typeof useBaseProfiles>['create'];
+  updateBaseProfile: ReturnType<typeof useBaseProfiles>['update'];
+  removeBaseProfile: ReturnType<typeof useBaseProfiles>['remove'];
   activeResumeId: string | null;
   loadResumeById: (id: string) => Promise<void>;
   clearResumeSession: () => void;
@@ -94,6 +111,7 @@ export default function App() {
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [isExtractingMetadata, setIsExtractingMetadata] = useState(false);
   const [saveDescription, setSaveDescription] = useState('');
+  const [selectedTemplateKey, setSelectedTemplateKeyState] = useState<ResumeTemplateKey>('classic');
 
   // ── Hooks ───────────────────────────────────────────────────────
   const { notify } = useNotification();
@@ -103,17 +121,59 @@ export default function App() {
   const { isDownloading, resumeRef, contentRef, downloadDocx } = useDocxDownload();
   const qa = useApplicationQA();
   const { createResume, updateResume, getResumeById } = useResumeDownloads();
-  const { baseProfiles } = useBaseProfiles();
+  const {
+    templates,
+    activeTemplates,
+    isLoading: templatesLoading,
+    error: templatesError,
+    refresh: refreshTemplates,
+    create: createTemplate,
+    update: updateTemplate,
+    remove: removeTemplate,
+  } = useResumeTemplates();
+  const {
+    baseProfiles,
+    isLoading: baseProfilesLoading,
+    refresh: refreshBaseProfiles,
+    create: createBaseProfile,
+    update: updateBaseProfile,
+    remove: removeBaseProfile,
+  } = useBaseProfiles();
+
+  const [resumeHydrated, setResumeHydrated] = useState(false);
+
+  useEffect(() => {
+    const storedTemplate = localStorage.getItem(STORAGE_KEYS.RESUME_TEMPLATE);
+    if (storedTemplate === 'classic' || storedTemplate === 'modern' || storedTemplate === 'compact') {
+      setSelectedTemplateKeyState(storedTemplate);
+    }
+  }, []);
+
+  const setSelectedTemplateKey = useCallback((key: ResumeTemplateKey) => {
+    setSelectedTemplateKeyState(key);
+    localStorage.setItem(STORAGE_KEYS.RESUME_TEMPLATE, key);
+  }, []);
 
   // ── Persist base resume ─────────────────────────────────────────
   useEffect(() => {
     const baseResume = localStorage.getItem(STORAGE_KEYS.BASE_RESUME);
     if (baseResume) setResume(baseResume);
+    setResumeHydrated(true);
   }, []);
 
   useEffect(() => {
+    if (!resumeHydrated) return;
     localStorage.setItem(STORAGE_KEYS.BASE_RESUME, resume);
-  }, [resume]);
+  }, [resume, resumeHydrated]);
+
+  // Auto-load the sole base profile once profiles are fetched (overrides stale localStorage draft).
+  useEffect(() => {
+    if (!resumeHydrated || baseProfilesLoading || baseProfiles.length !== 1) return;
+    const stored = localStorage.getItem(STORAGE_KEYS.BASE_RESUME) ?? '';
+    if (!resume.trim() || resume === stored) {
+      setResume(baseProfiles[0]!.content);
+    }
+  }, [resumeHydrated, baseProfilesLoading, baseProfiles, resume]);
 
   // ── Check API key on mount ──────────────────────────────────────
   useEffect(() => {
@@ -179,6 +239,7 @@ export default function App() {
 
     const result = await downloadDocx({
       resumeData,
+      templateKey: selectedTemplateKey,
       jobCompany: generation.jobCompany,
       stackInfo: generation.stackInfo,
       notify,
@@ -222,6 +283,7 @@ export default function App() {
     generation.stackInfo,
     notify,
     resumeData,
+    selectedTemplateKey,
     createResume,
     updateResume,
     activeResumeId,
@@ -305,7 +367,22 @@ export default function App() {
     handleSaveResume,
     handleGenerateAnswers,
     handleCopyAnswer,
+    templates,
+    activeTemplates,
+    templatesLoading,
+    templatesError,
+    selectedTemplateKey,
+    setSelectedTemplateKey,
+    refreshTemplates,
+    createTemplate,
+    updateTemplate,
+    removeTemplate,
     baseProfiles,
+    baseProfilesLoading,
+    refreshBaseProfiles,
+    createBaseProfile,
+    updateBaseProfile,
+    removeBaseProfile,
     activeResumeId,
     loadResumeById,
     clearResumeSession,

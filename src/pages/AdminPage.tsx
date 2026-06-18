@@ -19,6 +19,7 @@ import {
 import { useAuth, AuthUser } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import AdminTemplateManager from '../components/AdminTemplateManager';
 
 type SortField = 'name' | 'status' | 'resumesBuilt' | 'downloadsCount' | 'generationEvents' | 'createdAt';
 type StatusFilter = 'all' | AuthUser['status'];
@@ -400,6 +401,8 @@ export default function AdminPage() {
         <StatCard icon={<Crown className="w-5 h-5" />} label="Tracked Builds" value={stats.trackedGenerations} color="indigo" compact />
         <StatCard icon={<Download className="w-5 h-5" />} label="Tracked Downloads" value={stats.trackedDownloads} color="amber" compact />
       </div>
+
+      <AdminTemplateManager />
 
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="px-4 py-3 border-b border-slate-200 bg-slate-50/50">
