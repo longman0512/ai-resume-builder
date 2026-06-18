@@ -1,14 +1,15 @@
 # AI Resume Tailor
 
-AI Resume Tailor is a full-stack resume builder that helps users tailor resumes and cover letters to specific job descriptions using Google Gemini. It includes authenticated user accounts, download history, base profile management, and an admin dashboard for user oversight and activity analytics.
+AI Resume Tailor is a full-stack resume builder that helps users tailor resumes and cover letters to specific job descriptions using Google Gemini. It includes authenticated user accounts, download history, base profile management, selectable resume templates, and an admin dashboard for user oversight, template management, and activity analytics.
 
 ## Features
 
 ### Resume Builder
 - Paste a base resume and job description, then generate a tailored resume with AI
+- Choose a resume template (`classic`, `modern`, or `compact`) before generating or on the preview page
 - Edit generated content in a structured editor (experience, skills, education, profile)
 - Generate cover letters and application Q&A responses
-- Export tailored resumes as DOCX (with optional zip packaging)
+- Export tailored resumes as DOCX (with optional zip packaging) using the selected template layout
 - Save multiple named base profiles for reuse
 
 ### User Accounts
@@ -24,6 +25,14 @@ AI Resume Tailor is a full-stack resume builder that helps users tailor resumes 
 - Analytics for resume builds and downloads
 - Combined monthly chart (builds vs downloads, different colors)
 - Per-user totals: generated resumes, downloads, base profiles
+- **Resume template management**
+  - Create, edit, activate/deactivate, and delete templates
+  - Assign each template to a layout key: `classic`, `modern`, or `compact`
+  - Store template metadata in Supabase (`source_type`, `source_filename`, `preview_url`, `template_schema`)
+  - Preview thumbnails with click-to-enlarge full-size view
+  - Seeded templates: **Classic** (single-column, skills before experience) and **Modern** (profile → experience → education → skills)
+
+Non-admin users who open `/admin` are redirected to `/builder` automatically.
 
 ## Tech Stack
 
@@ -78,7 +87,13 @@ GEMINI_API_KEY=your-gemini-api-key
 Run the SQL files in the Supabase SQL Editor:
 
 1. **`supabase-schema.sql`** — full schema (fresh project or idempotent re-run)
-2. **`supabase-admin-panel.sql`** — admin extras if upgrading an existing database (`status`, `resume_generations`, `downloads_count`)
+2. **`supabase-admin-panel.sql`** — admin extras if upgrading an existing database (`status`, `resume_generations`, `downloads_count`, `resume_templates`)
+
+If template features are missing, run section **7** in `supabase-admin-panel.sql` (creates `resume_templates`, RLS policies, and seeds Classic/Modern/Compact). Then refresh the schema cache:
+
+```sql
+NOTIFY pgrst, 'reload schema';
+```
 
 ### 4. Create an admin user
 
@@ -117,14 +132,15 @@ Open [http://localhost:3000](http://localhost:3000).
 ai-resume-builder/
 ├── src/
 │   ├── pages/           # Route pages (Builder, History, Admin, Profile, Settings)
-│   ├── components/      # UI components and resume sections
+│   ├── components/      # UI components, resume sections, AdminTemplateManager
 │   ├── contexts/        # Auth context (Supabase session + profile)
-│   ├── hooks/           # Data hooks (downloads, profiles, generation, export)
+│   ├── hooks/           # Data hooks (downloads, profiles, templates, generation, export)
 │   ├── lib/             # Supabase client, DOCX export, utilities
 │   ├── services/        # Gemini AI service
 │   └── types/           # Shared TypeScript types
+├── public/templates/        # Template preview SVG assets
 ├── supabase-schema.sql      # Main database schema
-├── supabase-admin-panel.sql # Admin/analytics migration
+├── supabase-admin-panel.sql # Admin/analytics/template migration
 ├── tests/                   # Playwright tests
 └── .github/workflows/       # CI (Playwright)
 ```
@@ -138,6 +154,26 @@ ai-resume-builder/
 
 The admin dashboard reads generation and download events for charts and totals. The History page shows saved downloads for the signed-in user.
 
+## Resume Templates
+
+Templates are stored in `public.resume_templates` and exposed to users through the Builder template selector.
+
+| Layout key | Description |
+| --- | --- |
+| `classic` | Traditional single-column layout; skills appear before experience |
+| `modern` | Clean layout with profile, experience, education, then core technologies |
+| `compact` | Dense layout for longer resumes |
+
+Each template record includes:
+
+- `name`, `description`, `template_key`
+- `source_type` (`code`, `pdf`, or `docx`) and optional `source_filename`
+- `preview_url` (e.g. `/templates/classic-preview.svg`)
+- `template_schema` (JSON metadata: section order, labels, placeholders)
+- `is_active`, `sort_order`
+
+Admins manage templates at `/admin`. Only **active** templates appear in the Builder dropdown. Preview images can be clicked to view full size in Admin and Builder.
+
 ## Routes
 
 | Path | Access | Description |
@@ -147,7 +183,7 @@ The admin dashboard reads generation and download events for charts and totals. 
 | `/history` | User | Download history & monthly chart |
 | `/profile` | User | Base resume profiles |
 | `/settings` | User | Gemini API key settings |
-| `/admin` | Admin | User management & analytics |
+| `/admin` | Admin | User management, template management & analytics |
 
 ## Security Notes
 
